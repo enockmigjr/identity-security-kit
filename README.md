@@ -28,6 +28,9 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 ## Options et user meta
 
 - `identity_security_kit_settings`
+  - `min_password_length`, `max_avatar_size_mb`, `max_avatar_dimension`
+  - `email_verification_ttl_hours`, `email_verification_resend_minutes`
+  - `login_attempts_per_window`, `registration_attempts_per_window`, `password_reset_attempts_per_window`, `email_resend_attempts_per_window`, `rate_limit_window_minutes`
 - `identity_security_kit_version`
 - `identity_email_verified`
 - `identity_email_verification_pending`
@@ -61,7 +64,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 
 ## Reste majeur
 
-- OTP email avec expiration, tentatives, anti-replay et rate limiting.
+- OTP email avec expiration, tentatives et anti-replay.
 - OTP SMS/provider abstraction.
 - TOTP/MFA.
 - Recovery codes.

@@ -121,6 +121,7 @@ function identity_security_kit_render_admin_page() {
 			<?php identity_security_kit_render_metric( __( 'Email verified', 'identity-security-kit' ), number_format_i18n( $verified_count ), __( 'Confirmed addresses', 'identity-security-kit' ) ); ?>
 			<?php identity_security_kit_render_metric( __( 'Email pending', 'identity-security-kit' ), number_format_i18n( $pending_count ), __( 'Awaiting confirmation', 'identity-security-kit' ) ); ?>
 			<?php identity_security_kit_render_metric( __( 'Password min', 'identity-security-kit' ), (string) $settings['min_password_length'], __( 'Characters required', 'identity-security-kit' ) ); ?>
+			<?php identity_security_kit_render_metric( __( 'Rate window', 'identity-security-kit' ), sprintf( __( '%d min', 'identity-security-kit' ), $settings['rate_limit_window_minutes'] ), __( 'Identity throttling', 'identity-security-kit' ) ); ?>
 			<?php identity_security_kit_render_metric( __( 'Audit events', 'identity-security-kit' ), number_format_i18n( $audit_count ), __( 'Sensitive actions logged', 'identity-security-kit' ) ); ?>
 		</div>
 
@@ -167,7 +168,41 @@ function identity_security_kit_render_admin_page() {
 								<p class="description"><?php esc_html_e( 'Authenticated users must wait before requesting another verification link.', 'identity-security-kit' ); ?></p>
 							</td>
 						</tr>
-					</table>
+						<tr>
+							<th scope="row"><label for="isk_login_attempts_per_window"><?php esc_html_e( 'Login attempts', 'identity-security-kit' ); ?></label></th>
+							<td>
+								<input id="isk_login_attempts_per_window" class="small-text" name="login_attempts_per_window" type="number" min="3" max="60" value="<?php echo esc_attr( $settings['login_attempts_per_window'] ); ?>">
+								<p class="description"><?php esc_html_e( 'Allowed login submissions per visitor during the rate limit window.', 'identity-security-kit' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_registration_attempts_per_window"><?php esc_html_e( 'Registration attempts', 'identity-security-kit' ); ?></label></th>
+							<td>
+								<input id="isk_registration_attempts_per_window" class="small-text" name="registration_attempts_per_window" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['registration_attempts_per_window'] ); ?>">
+								<p class="description"><?php esc_html_e( 'Allowed registration submissions per visitor during the rate limit window.', 'identity-security-kit' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_password_reset_attempts_per_window"><?php esc_html_e( 'Password reset attempts', 'identity-security-kit' ); ?></label></th>
+							<td>
+								<input id="isk_password_reset_attempts_per_window" class="small-text" name="password_reset_attempts_per_window" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['password_reset_attempts_per_window'] ); ?>">
+								<p class="description"><?php esc_html_e( 'Allowed forgot-password submissions per visitor during the rate limit window.', 'identity-security-kit' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_email_resend_attempts_per_window"><?php esc_html_e( 'Email resend attempts', 'identity-security-kit' ); ?></label></th>
+							<td>
+								<input id="isk_email_resend_attempts_per_window" class="small-text" name="email_resend_attempts_per_window" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['email_resend_attempts_per_window'] ); ?>">
+								<p class="description"><?php esc_html_e( 'Allowed verification resend submissions per signed-in user during the rate limit window.', 'identity-security-kit' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_rate_limit_window_minutes"><?php esc_html_e( 'Rate limit window', 'identity-security-kit' ); ?></label></th>
+							<td>
+								<input id="isk_rate_limit_window_minutes" class="small-text" name="rate_limit_window_minutes" type="number" min="1" max="1440" value="<?php echo esc_attr( $settings['rate_limit_window_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?>
+								<p class="description"><?php esc_html_e( 'Shared window for login, registration, password reset and resend throttling.', 'identity-security-kit' ); ?></p>
+							</td>
+						</tr>					</table>
 
 					<?php submit_button( __( 'Save settings', 'identity-security-kit' ) ); ?>
 				</form>
@@ -248,6 +283,11 @@ function identity_security_kit_handle_save_settings() {
 		'max_avatar_dimension'        => isset( $_POST['max_avatar_dimension'] ) ? max( 512, min( 6000, absint( $_POST['max_avatar_dimension'] ) ) ) : 6000,
 		'email_verification_ttl_hours'       => isset( $_POST['email_verification_ttl_hours'] ) ? max( 1, min( 168, absint( $_POST['email_verification_ttl_hours'] ) ) ) : 24,
 		'email_verification_resend_minutes' => isset( $_POST['email_verification_resend_minutes'] ) ? max( 1, min( 1440, absint( $_POST['email_verification_resend_minutes'] ) ) ) : 15,
+		'login_attempts_per_window'          => isset( $_POST['login_attempts_per_window'] ) ? max( 3, min( 60, absint( $_POST['login_attempts_per_window'] ) ) ) : 12,
+		'registration_attempts_per_window'   => isset( $_POST['registration_attempts_per_window'] ) ? max( 1, min( 30, absint( $_POST['registration_attempts_per_window'] ) ) ) : 6,
+		'password_reset_attempts_per_window' => isset( $_POST['password_reset_attempts_per_window'] ) ? max( 1, min( 30, absint( $_POST['password_reset_attempts_per_window'] ) ) ) : 6,
+		'email_resend_attempts_per_window'   => isset( $_POST['email_resend_attempts_per_window'] ) ? max( 1, min( 30, absint( $_POST['email_resend_attempts_per_window'] ) ) ) : 6,
+		'rate_limit_window_minutes'          => isset( $_POST['rate_limit_window_minutes'] ) ? max( 1, min( 1440, absint( $_POST['rate_limit_window_minutes'] ) ) ) : 15,
 	);
 
 	update_option( 'identity_security_kit_settings', $settings, false );

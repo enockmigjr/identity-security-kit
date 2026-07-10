@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.1.5
+ * Version: 0.1.6
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.1.5' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.1.6' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -39,6 +39,11 @@ function identity_security_kit_get_default_settings() {
 		'max_avatar_dimension'        => 6000,
 		'email_verification_ttl_hours'       => 24,
 		'email_verification_resend_minutes' => 15,
+		'login_attempts_per_window'          => 12,
+		'registration_attempts_per_window'   => 6,
+		'password_reset_attempts_per_window' => 6,
+		'email_resend_attempts_per_window'   => 6,
+		'rate_limit_window_minutes'          => 15,
 	);
 }
 
@@ -57,10 +62,72 @@ function identity_security_kit_get_settings() {
 	$settings['max_avatar_dimension']        = max( 512, min( 6000, absint( $settings['max_avatar_dimension'] ) ) );
 	$settings['email_verification_ttl_hours']       = max( 1, min( 168, absint( $settings['email_verification_ttl_hours'] ) ) );
 	$settings['email_verification_resend_minutes'] = max( 1, min( 1440, absint( $settings['email_verification_resend_minutes'] ) ) );
+	$settings['login_attempts_per_window']          = max( 3, min( 60, absint( $settings['login_attempts_per_window'] ) ) );
+	$settings['registration_attempts_per_window']   = max( 1, min( 30, absint( $settings['registration_attempts_per_window'] ) ) );
+	$settings['password_reset_attempts_per_window'] = max( 1, min( 30, absint( $settings['password_reset_attempts_per_window'] ) ) );
+	$settings['email_resend_attempts_per_window']   = max( 1, min( 30, absint( $settings['email_resend_attempts_per_window'] ) ) );
+	$settings['rate_limit_window_minutes']          = max( 1, min( 1440, absint( $settings['rate_limit_window_minutes'] ) ) );
 
 	return $settings;
 }
 
+/**
+ * Build a privacy-preserving request fingerprint for rate limiting.
+ *
+ * @return string
+ */
+function identity_security_kit_get_rate_limit_fingerprint() {
+	if ( is_user_logged_in() ) {
+		return 'user:' . get_current_user_id();
+	}
+
+	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+
+	return 'anon:' . hash_hmac( 'sha256', $ip . '|' . $ua, wp_salt( 'auth' ) );
+}
+
+/**
+ * Apply a transient-backed rate limit without storing raw IP addresses.
+ *
+ * @param string $bucket Bucket name.
+ * @param int    $limit  Max attempts.
+ * @param int    $window Window in seconds.
+ * @return bool
+ */
+function identity_security_kit_rate_limit( $bucket, $limit, $window ) {
+	$bucket = sanitize_key( $bucket );
+	$limit  = max( 1, absint( $limit ) );
+	$window = max( MINUTE_IN_SECONDS, absint( $window ) );
+
+	if ( current_user_can( 'identity_manage_security' ) || current_user_can( 'manage_options' ) ) {
+		return true;
+	}
+
+	$key      = 'isk_rl_' . md5( $bucket . '|' . identity_security_kit_get_rate_limit_fingerprint() );
+	$attempts = absint( get_transient( $key ) );
+	if ( $attempts >= $limit ) {
+		return false;
+	}
+
+	set_transient( $key, $attempts + 1, $window );
+	return true;
+}
+
+/**
+ * Apply a configured Identity Kit rate limit bucket.
+ *
+ * @param string $bucket Bucket name.
+ * @param string $setting_key Settings key containing the max attempts.
+ * @return bool
+ */
+function identity_security_kit_rate_limit_by_setting( $bucket, $setting_key ) {
+	$settings = identity_security_kit_get_settings();
+	$limit    = isset( $settings[ $setting_key ] ) ? absint( $settings[ $setting_key ] ) : 6;
+	$window   = isset( $settings['rate_limit_window_minutes'] ) ? absint( $settings['rate_limit_window_minutes'] ) * MINUTE_IN_SECONDS : 15 * MINUTE_IN_SECONDS;
+
+	return identity_security_kit_rate_limit( $bucket, $limit, $window );
+}
 /**
  * Return the audit table name.
  *

@@ -275,6 +275,10 @@ function identity_security_kit_handle_resend_email_verification() {
 
 	$user_id = get_current_user_id();
 	$user    = wp_get_current_user();
+	if ( ! identity_security_kit_rate_limit_by_setting( 'email_verification_resend', 'email_resend_attempts_per_window' ) ) {
+		identity_security_kit_log_event( 'email_verification_resend_rate_limited', 'warning', $user_id );
+		identity_security_kit_redirect( 'profile', array( 'verify' => 'rate_limited' ) );
+	}
 
 	if ( ! $user || ! is_email( $user->user_email ) ) {
 		identity_security_kit_log_event( 'email_verification_resend_rejected', 'warning', $user_id, array( 'reason' => 'invalid_email' ) );

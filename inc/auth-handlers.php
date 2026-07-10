@@ -172,6 +172,10 @@ function identity_security_kit_handle_login() {
 		identity_security_kit_log_event( 'login_nonce_failed', 'failure' );
 		wp_die( esc_html__( 'Security verification failed.', 'identity-security-kit' ) );
 	}
+	if ( ! identity_security_kit_rate_limit_by_setting( 'login', 'login_attempts_per_window' ) ) {
+		identity_security_kit_log_event( 'login_rate_limited', 'warning' );
+		identity_security_kit_redirect( 'login', array( 'login' => 'rate_limited' ) );
+	}
 
 	$creds = array(
 		'user_login'    => isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( $_POST['log'] ) ) : '',
@@ -207,6 +211,10 @@ function identity_security_kit_handle_forgot_password() {
 	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['photovault_forgot_nonce'] ) ), 'photovault_forgot_action' ) ) {
 		identity_security_kit_log_event( 'password_reset_nonce_failed', 'failure' );
 		identity_security_kit_redirect( 'forgot_password', array( 'forgot' => 'security_failed' ) );
+	}
+	if ( ! identity_security_kit_rate_limit_by_setting( 'password_reset', 'password_reset_attempts_per_window' ) ) {
+		identity_security_kit_log_event( 'password_reset_rate_limited', 'warning' );
+		identity_security_kit_redirect( 'forgot_password', array( 'forgot' => 'rate_limited' ) );
 	}
 
 	$user_input = isset( $_POST['user_login'] ) ? sanitize_text_field( wp_unslash( $_POST['user_login'] ) ) : '';
@@ -256,6 +264,10 @@ function identity_security_kit_handle_registration() {
 	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['photovault_register_nonce'] ) ), 'photovault_register_action' ) ) {
 		identity_security_kit_log_event( 'registration_nonce_failed', 'failure' );
 		wp_die( esc_html__( 'Security verification failed.', 'identity-security-kit' ) );
+	}
+	if ( ! identity_security_kit_rate_limit_by_setting( 'registration', 'registration_attempts_per_window' ) ) {
+		identity_security_kit_log_event( 'registration_rate_limited', 'warning' );
+		identity_security_kit_redirect( 'register', array( 'register' => 'failed', 'err' => 'rate_limited' ) );
 	}
 
 	$first_name = isset( $_POST['first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['first_name'] ) ) : '';
