@@ -351,7 +351,7 @@ function identity_security_kit_confirm_totp_enrollment( $user_id, $code ) {
 	update_user_meta( $user_id, 'identity_mfa_totp_last_counter', $counter );
 	update_user_meta( $user_id, 'identity_mfa_enabled_at', gmdate( 'Y-m-d H:i:s' ) );
 	delete_user_meta( $user_id, 'identity_mfa_totp_pending' );
-	delete_user_meta( $user_id, 'identity_mfa_grace_started_at' );
+	identity_security_kit_clear_mfa_grace_state( $user_id );
 
 	$codes = identity_security_kit_generate_recovery_codes( $user_id );
 	if ( is_wp_error( $codes ) ) {

@@ -184,7 +184,7 @@ function identity_security_kit_enable_channel_mfa( $user_id, $method, $challenge
 
 	update_user_meta( $user_id, 'identity_mfa_' . $method . '_enabled', '1' );
 	update_user_meta( $user_id, 'identity_mfa_enabled_at', gmdate( 'Y-m-d H:i:s' ) );
-	delete_user_meta( $user_id, 'identity_mfa_grace_started_at' );
+	identity_security_kit_clear_mfa_grace_state( $user_id );
 	if ( '' === (string) get_user_meta( $user_id, 'identity_mfa_preferred_method', true ) ) {
 		update_user_meta( $user_id, 'identity_mfa_preferred_method', $method );
 	}

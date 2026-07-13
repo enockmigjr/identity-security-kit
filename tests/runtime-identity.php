@@ -257,6 +257,36 @@ try {
 	);
 	identity_runtime_assert( ! is_wp_error( $grace_id ), 'Grace-period test user creation failed.' );
 	$user_ids[] = (int) $grace_id;
+	$email_messages = array();
+	update_user_meta( $grace_id, 'identity_mfa_grace_started_at', time() - ( 2 * DAY_IN_SECONDS ) );
+	identity_runtime_assert( 1 === identity_security_kit_maybe_send_mfa_grace_reminder( $grace_id ) && 1 === count( $email_messages ), 'The day-one MFA reminder was not sent.' );
+	identity_runtime_assert( false === identity_security_kit_maybe_send_mfa_grace_reminder( $grace_id ) && 1 === count( $email_messages ), 'The day-one MFA reminder was sent more than once.' );
+
+	delete_user_meta( $grace_id, 'identity_mfa_grace_reminders' );
+	update_user_meta( $grace_id, 'identity_mfa_grace_started_at', time() - ( 8 * DAY_IN_SECONDS ) );
+	identity_runtime_assert( 7 === identity_security_kit_maybe_send_mfa_grace_reminder( $grace_id ) && 2 === count( $email_messages ), 'The highest due MFA reminder was not selected after a delayed cron.' );
+	$reminder_state = get_user_meta( $grace_id, 'identity_mfa_grace_reminders', true );
+	identity_runtime_assert( array( 1, 7 ) === ( $reminder_state['sent'] ?? array() ), 'Delayed processing did not suppress obsolete lower reminders.' );
+
+	delete_user_meta( $grace_id, 'identity_mfa_grace_reminders' );
+	update_user_meta( $grace_id, 'identity_mfa_grace_started_at', time() - ( 13 * DAY_IN_SECONDS ) );
+	identity_runtime_assert( 12 === identity_security_kit_maybe_send_mfa_grace_reminder( $grace_id ) && 3 === count( $email_messages ), 'The day-twelve MFA reminder was not sent.' );
+	identity_runtime_assert( array( 1 ) === identity_security_kit_get_mfa_reminder_days( 5 ), 'Reminder milestones were not bounded by a shorter grace period.' );
+
+	$grace_user = get_userdata( $grace_id );
+	$grace_user->set_role( 'subscriber' );
+	identity_runtime_assert( '' === (string) get_user_meta( $grace_id, 'identity_mfa_grace_started_at', true ) && '' === (string) get_user_meta( $grace_id, 'identity_mfa_grace_reminders', true ), 'Removing the required role did not clear grace and reminder state.' );
+	$grace_user->set_role( 'author' );
+	identity_runtime_assert( 0 < absint( get_user_meta( $grace_id, 'identity_mfa_grace_started_at', true ) ), 'Restoring a required role did not start a new grace period.' );
+	$policy_settings                              = $settings;
+	$policy_settings['mfa_required_capabilities'] = array( 'manage_options' );
+	update_option( 'identity_security_kit_settings', $policy_settings, false );
+	identity_security_kit_refresh_mfa_grace( $grace_id );
+	identity_runtime_assert( '' === (string) get_user_meta( $grace_id, 'identity_mfa_grace_started_at', true ), 'A policy change that excluded the account did not clear its grace state.' );
+	update_option( 'identity_security_kit_settings', $settings, false );
+	identity_security_kit_refresh_mfa_grace( $grace_id );
+	identity_runtime_assert( 0 < absint( get_user_meta( $grace_id, 'identity_mfa_grace_started_at', true ) ), 'A policy change that included the account did not restart grace tracking.' );
+
 	update_user_meta( $grace_id, 'identity_mfa_grace_started_at', time() - ( 16 * DAY_IN_SECONDS ) );
 	identity_runtime_assert( identity_security_kit_is_mfa_grace_expired( $grace_id ), 'MFA access was not considered expired after day 15.' );
 	identity_runtime_assert( ! identity_security_kit_is_mfa_grace_expired( $user_id ), 'An enrolled account was incorrectly considered beyond grace.' );
@@ -271,6 +301,7 @@ try {
 			'mfa_login'          => array( 'email', 'sms', 'totp', 'recovery' ),
 			'mfa_lifecycle'      => 'channel_removal_and_last_factor_policy_validated',
 			'mfa_grace_days'     => 15,
+			'mfa_reminders'      => array( 1, 7, 12 ),
 		)
 	);
 } finally {

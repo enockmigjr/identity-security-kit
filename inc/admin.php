@@ -357,6 +357,7 @@ function identity_security_kit_handle_save_settings() {
 	);
 
 	update_option( 'identity_security_kit_settings', $settings, false );
+	update_option( 'identity_security_kit_mfa_policy_page', 1, false );
 	identity_security_kit_log_event( 'identity_settings_changed', 'success' );
 	wp_safe_redirect( admin_url( 'admin.php?page=identity-security-kit&settings-updated=true' ) );
 	exit;

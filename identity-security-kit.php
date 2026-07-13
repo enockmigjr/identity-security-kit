@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.7.0
+ * Version: 0.8.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.7.0' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.8.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -310,9 +310,18 @@ function identity_security_kit_activate() {
 	}
 
 	identity_security_kit_install_schema();
+	if ( function_exists( 'identity_security_kit_schedule_mfa_policy_cron' ) ) {
+		identity_security_kit_schedule_mfa_policy_cron();
+	}
 	update_option( 'identity_security_kit_version', IDENTITY_SECURITY_KIT_VERSION, false );
 }
 register_activation_hook( __FILE__, 'identity_security_kit_activate' );
+
+/** Remove recurring work when the plugin is deactivated. */
+function identity_security_kit_deactivate() {
+	wp_clear_scheduled_hook( 'identity_security_kit_mfa_policy_cron' );
+}
+register_deactivation_hook( __FILE__, 'identity_security_kit_deactivate' );
 
 /**
  * Apply versioned upgrades for already active installations.

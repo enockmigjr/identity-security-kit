@@ -16,6 +16,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Desactiver les facteurs TOTP, email et SMS apres re-authentification, sans permettre a un compte soumis au MFA de retirer son dernier facteur.
 - Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
 - Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
+- Envoyer des rappels MFA J+1, J+7 et J+12 par cron borne et idempotent, puis reconciler les changements de roles et de politique.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
@@ -52,6 +53,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_mfa_totp_secret`, `identity_mfa_totp_last_counter`, `identity_mfa_recovery_codes`
 - `identity_mfa_email_enabled`, `identity_mfa_sms_enabled`, `identity_mfa_preferred_method`
 - `identity_mfa_grace_started_at`, `identity_mfa_login_challenge`
+- `identity_mfa_grace_reminders`
 - `identity_pending_email_change` (adresse proposee chiffree, token hashe et expiration)
 - `photovault_avatar_id`
 
@@ -97,6 +99,12 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_security_kit_allowed_mfa_methods`
 - `identity_security_kit_user_requires_mfa`
 - `identity_security_kit_user_has_mfa`
+- `identity_security_kit_mfa_reminder_days`
+- `identity_security_kit_mfa_policy_batch_size`
+
+## Cron
+
+- `identity_security_kit_mfa_policy_cron`: traitement horaire borne a 200 comptes par defaut, avec curseur persistant et nettoyage a la desactivation.
 
 ## OTP email
 
@@ -116,7 +124,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 4. Confirmer que les reglages restent bornes avec des valeurs POST extremes.
 5. Verifier que l'audit ne stocke pas mot de passe, reset key, token brut ou IP brute.
 6. Executer `php tests/run.php`, `php tests/otp.php` et `php tests/sms-provider.php`.
-7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA, cycle de vie des facteurs et grace 15 jours.
+7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA, cycle de vie des facteurs, rappels et grace 15 jours.
 8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
@@ -127,7 +135,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 - QR Code TOTP accessible.
 - Remplacement guide des facteurs et validation des changements concurrents en navigateur.
 - Provider SMS reel valide en staging/production; les tests actuels utilisent l'adaptateur generique controle.
-- Rappels de grace MFA, changement de policy/capabilities et cas multisite.
+- Cas multisite et changement direct des capabilities d'un role hors API utilisateur.
 - Tests navigateur du login natif et matrice d'autorisation wp-admin/AJAX.
 
 ## References officielles
@@ -135,5 +143,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 - [WordPress Nonces](https://developer.wordpress.org/apis/security/nonces/)
 - [WordPress Password Hashing API](https://developer.wordpress.org/reference/functions/wp_check_password/)
 - [WordPress send_confirmation_on_profile_email](https://developer.wordpress.org/reference/functions/send_confirmation_on_profile_email/)
+- [WordPress Scheduling WP-Cron Events](https://developer.wordpress.org/plugins/cron/scheduling-wp-cron-events/)
+- [WordPress add_user_role hook](https://developer.wordpress.org/reference/hooks/add_user_role/)
 - [RFC 6238 - TOTP](https://www.rfc-editor.org/rfc/rfc6238)
 - [NIST SP 800-63B - Authentication and Lifecycle Management](https://pages.nist.gov/800-63-4/sp800-63b.html)

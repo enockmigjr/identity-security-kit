@@ -78,6 +78,84 @@ function identity_security_kit_ensure_mfa_grace_started( $user_id ) {
 	return $started;
 }
 
+/** Return reminder milestones that occur before the configured deadline. */
+function identity_security_kit_get_mfa_reminder_days( $grace_days ) {
+	$grace_days = max( 1, absint( $grace_days ) );
+	$days       = apply_filters( 'identity_security_kit_mfa_reminder_days', array( 1, 7, 12 ), $grace_days );
+	$days       = is_array( $days ) ? array_map( 'absint', $days ) : array();
+	$days       = array_values( array_unique( array_filter( $days, static function ( $day ) use ( $grace_days ) {
+		return $day > 0 && $day < $grace_days;
+	} ) ) );
+	sort( $days, SORT_NUMERIC );
+
+	return $days;
+}
+
+/** Clear reminder state when a grace period no longer applies. */
+function identity_security_kit_clear_mfa_grace_state( $user_id ) {
+	delete_user_meta( absint( $user_id ), 'identity_mfa_grace_started_at' );
+	delete_user_meta( absint( $user_id ), 'identity_mfa_grace_reminders' );
+}
+
+/** Send one idempotent reminder for the highest milestone currently due. */
+function identity_security_kit_maybe_send_mfa_grace_reminder( $user_id, $now = 0 ) {
+	$user_id = absint( $user_id );
+	$now     = $now ? absint( $now ) : time();
+	$user    = get_userdata( $user_id );
+	if ( ! $user || ! identity_security_kit_user_requires_mfa( $user ) || identity_security_kit_user_has_mfa( $user_id ) ) {
+		return false;
+	}
+
+	$started    = identity_security_kit_ensure_mfa_grace_started( $user_id );
+	$settings   = identity_security_kit_get_settings();
+	$grace_days = absint( $settings['mfa_grace_days'] ?? 15 );
+	if ( ! $started || ! is_email( $user->user_email ) ) {
+		return false;
+	}
+	$elapsed = max( 0, (int) floor( ( $now - $started ) / DAY_IN_SECONDS ) );
+	$due        = array_values( array_filter( identity_security_kit_get_mfa_reminder_days( $grace_days ), static function ( $day ) use ( $elapsed ) {
+		return $day <= $elapsed;
+	} ) );
+	if ( empty( $due ) ) {
+		return false;
+	}
+
+	$state = get_user_meta( $user_id, 'identity_mfa_grace_reminders', true );
+	$state = is_array( $state ) && absint( $state['started'] ?? 0 ) === $started ? $state : array( 'started' => $started, 'sent' => array() );
+	$sent  = isset( $state['sent'] ) && is_array( $state['sent'] ) ? array_map( 'absint', $state['sent'] ) : array();
+	$day   = max( $due );
+	if ( in_array( $day, $sent, true ) ) {
+		return false;
+	}
+
+	$lock_key = 'isk_mfa_reminder_' . $user_id;
+	if ( get_transient( $lock_key ) ) {
+		return false;
+	}
+	set_transient( $lock_key, 1, 5 * MINUTE_IN_SECONDS );
+	$deadline  = $started + ( $grace_days * DAY_IN_SECONDS );
+	$remaining = max( 0, (int) ceil( ( $deadline - $now ) / DAY_IN_SECONDS ) );
+	$sent_ok   = wp_mail(
+		$user->user_email,
+		sprintf( __( '[%s] Two-factor authentication required', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) ),
+		sprintf( __( 'Your account requires two-factor authentication. %d day(s) remain before privileged access is restricted.', 'identity-security-kit' ), $remaining )
+			. "\n\n"
+			. sprintf( __( 'Configure a verification method: %s', 'identity-security-kit' ), admin_url( 'profile.php#identity-security-mfa' ) )
+	);
+	delete_transient( $lock_key );
+
+	if ( ! $sent_ok ) {
+		identity_security_kit_log_event( 'mfa_grace_reminder_failed', 'failure', $user_id, array( 'day' => $day ) );
+		return false;
+	}
+
+	$state['sent'] = array_values( array_unique( array_merge( $sent, $due ) ) );
+	update_user_meta( $user_id, 'identity_mfa_grace_reminders', $state );
+	identity_security_kit_log_event( 'mfa_grace_reminder_sent', 'success', $user_id, array( 'day' => $day, 'days_remaining' => $remaining ) );
+
+	return $day;
+}
+
 /**
  * Return the MFA grace deadline.
  *
@@ -100,13 +178,60 @@ function identity_security_kit_is_mfa_grace_expired( $user_id, $now = 0 ) {
 	return 0 !== $deadline && $now >= $deadline;
 }
 
-/** Initialize grace tracking after account or role changes. */
+/** Reconcile grace tracking after account, role or policy changes. */
 function identity_security_kit_refresh_mfa_grace( $user_id ) {
-	identity_security_kit_ensure_mfa_grace_started( absint( $user_id ) );
+	$user_id = absint( $user_id );
+	if ( ! get_userdata( $user_id ) ) {
+		return;
+	}
+	if ( ! identity_security_kit_user_requires_mfa( $user_id ) || identity_security_kit_user_has_mfa( $user_id ) ) {
+		identity_security_kit_clear_mfa_grace_state( $user_id );
+		return;
+	}
+	identity_security_kit_ensure_mfa_grace_started( $user_id );
 }
 add_action( 'user_register', 'identity_security_kit_refresh_mfa_grace', 30 );
 add_action( 'set_user_role', 'identity_security_kit_refresh_mfa_grace', 30 );
 add_action( 'add_user_role', 'identity_security_kit_refresh_mfa_grace', 30 );
+add_action( 'remove_user_role', 'identity_security_kit_refresh_mfa_grace', 30 );
+
+/** Process one bounded page of users for policy changes and reminders. */
+function identity_security_kit_process_mfa_policy_batch( $now = 0, $page = null ) {
+	$batch_size      = max( 20, min( 500, absint( apply_filters( 'identity_security_kit_mfa_policy_batch_size', 200 ) ) ) );
+	$stored_page     = max( 1, absint( get_option( 'identity_security_kit_mfa_policy_page', 1 ) ) );
+	$use_stored_page = null === $page;
+	$page            = $use_stored_page ? $stored_page : max( 1, absint( $page ) );
+	$user_ids        = get_users(
+		array(
+			'fields'  => 'ids',
+			'number'  => $batch_size,
+			'offset'  => ( $page - 1 ) * $batch_size,
+			'orderby' => 'ID',
+			'order'   => 'ASC',
+		)
+	);
+
+	foreach ( $user_ids as $user_id ) {
+		identity_security_kit_refresh_mfa_grace( $user_id );
+		identity_security_kit_maybe_send_mfa_grace_reminder( $user_id, $now );
+	}
+
+	if ( $use_stored_page ) {
+		update_option( 'identity_security_kit_mfa_policy_page', count( $user_ids ) < $batch_size ? 1 : $page + 1, false );
+	}
+	identity_security_kit_log_event( 'mfa_policy_batch_processed', 'success', 0, array( 'page' => $page, 'users' => count( $user_ids ) ) );
+
+	return count( $user_ids );
+}
+add_action( 'identity_security_kit_mfa_policy_cron', 'identity_security_kit_process_mfa_policy_batch' );
+
+/** Ensure the hourly reconciliation event exists exactly once. */
+function identity_security_kit_schedule_mfa_policy_cron() {
+	if ( ! wp_next_scheduled( 'identity_security_kit_mfa_policy_cron' ) ) {
+		wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', 'identity_security_kit_mfa_policy_cron' );
+	}
+}
+add_action( 'init', 'identity_security_kit_schedule_mfa_policy_cron' );
 
 /** Show a bounded warning while privileged users are in grace. */
 function identity_security_kit_mfa_admin_notice() {
