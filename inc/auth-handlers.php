@@ -177,26 +177,32 @@ function identity_security_kit_handle_login() {
 		identity_security_kit_redirect( 'login', array( 'login' => 'rate_limited' ) );
 	}
 
-	$creds = array(
-		'user_login'    => isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( $_POST['log'] ) ) : '',
-		'user_password' => isset( $_POST['pwd'] ) ? (string) wp_unslash( $_POST['pwd'] ) : '',
-		'remember'      => isset( $_POST['rememberme'] ),
-	);
-
-	$user = wp_signon( $creds, is_ssl() );
+	$login    = isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( $_POST['log'] ) ) : '';
+	$password = isset( $_POST['pwd'] ) ? (string) wp_unslash( $_POST['pwd'] ) : '';
+	$remember = isset( $_POST['rememberme'] );
+	$user     = wp_authenticate( $login, $password );
 
 	if ( is_wp_error( $user ) ) {
 		identity_security_kit_log_event( 'login_failed', 'failure', 0, array( 'reason' => $user->get_error_code() ) );
 		identity_security_kit_redirect( 'login', array( 'login' => 'failed' ) );
 	}
 
-	identity_security_kit_log_event( 'login_success', 'success', $user->ID );
-
-	if ( current_user_can( 'photovault_manage_media' ) || current_user_can( 'manage_options' ) ) {
-		identity_security_kit_redirect( 'dashboard' );
+	$redirect_key = user_can( $user, 'photovault_manage_media' ) || user_can( $user, 'manage_options' ) ? 'dashboard' : 'after_login';
+	if ( function_exists( 'identity_security_kit_is_totp_enabled' ) && identity_security_kit_is_totp_enabled( $user->ID ) ) {
+		$challenge_url = identity_security_kit_create_login_challenge( $user->ID, $remember, identity_security_kit_get_route_url( $redirect_key ) );
+		if ( is_wp_error( $challenge_url ) ) {
+			identity_security_kit_log_event( 'login_mfa_challenge_failed', 'failure', $user->ID, array( 'reason' => $challenge_url->get_error_code() ) );
+			identity_security_kit_redirect( 'login', array( 'login' => 'failed' ) );
+		}
+		wp_safe_redirect( $challenge_url );
+		exit;
 	}
 
-	identity_security_kit_redirect( 'after_login' );
+	wp_set_current_user( $user->ID );
+	wp_set_auth_cookie( $user->ID, $remember, is_ssl() );
+	do_action( 'wp_login', $user->user_login, $user );
+	identity_security_kit_log_event( 'login_success', 'success', $user->ID );
+	identity_security_kit_redirect( $redirect_key );
 }
 add_action( 'template_redirect', 'identity_security_kit_handle_login' );
 
@@ -274,23 +280,43 @@ function identity_security_kit_handle_registration() {
 	$last_name  = isset( $_POST['last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['last_name'] ) ) : '';
 	$username   = isset( $_POST['username'] ) ? sanitize_user( wp_unslash( $_POST['username'] ) ) : '';
 	$email      = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+	$phone      = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
 	$password   = isset( $_POST['password'] ) ? (string) wp_unslash( $_POST['password'] ) : '';
 	$password_c = isset( $_POST['password_confirm'] ) ? (string) wp_unslash( $_POST['password_confirm'] ) : '';
 
-	$error_code = '';
+	$error_code       = '';
+	$normalized_phone = '';
+	$settings         = identity_security_kit_get_settings();
 
 	if ( empty( $username ) || empty( $email ) || empty( $password ) ) {
 		$error_code = 'fields_required';
 	} elseif ( ! is_email( $email ) ) {
 		$error_code = 'invalid_email';
-	} elseif ( strlen( $password ) < identity_security_kit_get_min_password_length() ) {
-		$error_code = 'weak_password';
-	} elseif ( $password !== $password_c ) {
-		$error_code = 'password_mismatch';
-	} elseif ( email_exists( $email ) ) {
-		$error_code = 'email_exists';
-	} elseif ( username_exists( $username ) ) {
-		$error_code = 'username_exists';
+	}
+
+	if ( '' === $error_code ) {
+		if ( ! empty( $settings['phone_required'] ) && '' === trim( $phone ) ) {
+			$error_code = 'phone_required';
+		} elseif ( '' !== trim( $phone ) ) {
+			$phone_validation = identity_security_kit_validate_unique_phone( $phone );
+			if ( is_wp_error( $phone_validation ) ) {
+				$error_code = $phone_validation->get_error_code();
+			} else {
+				$normalized_phone = $phone_validation;
+			}
+		}
+	}
+
+	if ( '' === $error_code ) {
+		if ( strlen( $password ) < identity_security_kit_get_min_password_length() ) {
+			$error_code = 'weak_password';
+		} elseif ( $password !== $password_c ) {
+			$error_code = 'password_mismatch';
+		} elseif ( email_exists( $email ) ) {
+			$error_code = 'email_exists';
+		} elseif ( username_exists( $username ) ) {
+			$error_code = 'username_exists';
+		}
 	}
 
 	if ( ! empty( $error_code ) ) {
@@ -312,6 +338,16 @@ function identity_security_kit_handle_registration() {
 	if ( is_wp_error( $user_id ) ) {
 		identity_security_kit_log_event( 'registration_failed', 'failure', 0, array( 'reason' => $user_id->get_error_code() ) );
 		identity_security_kit_redirect( 'register', array( 'register' => 'failed', 'err' => 'failed' ) );
+	}
+
+	if ( '' !== $normalized_phone ) {
+		$phone_result = identity_security_kit_set_user_phone( $user_id, $normalized_phone );
+		if ( is_wp_error( $phone_result ) ) {
+			identity_security_kit_log_event( 'registration_phone_failed', 'failure', $user_id, array( 'reason' => $phone_result->get_error_code() ) );
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+			wp_delete_user( $user_id );
+			identity_security_kit_redirect( 'register', array( 'register' => 'failed', 'err' => 'phone_save_failed' ) );
+		}
 	}
 
 	identity_security_kit_log_event( 'registration_success', 'success', $user_id );
@@ -351,12 +387,29 @@ function identity_security_kit_handle_profile_update() {
 	$current_user_id = get_current_user_id();
 	$current_user    = wp_get_current_user();
 	$email           = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+	$phone           = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
 	$email_changed   = strtolower( $email ) !== strtolower( $current_user->user_email );
 	$bio             = isset( $_POST['bio'] ) ? sanitize_textarea_field( wp_unslash( $_POST['bio'] ) ) : '';
+	$current_phone   = (string) get_user_meta( $current_user_id, identity_security_kit_phone_meta_key(), true );
+	$phone_changed   = '' !== trim( $phone ) && $current_phone !== $phone;
+	$settings        = identity_security_kit_get_settings();
 
 	if ( empty( $email ) || ! is_email( $email ) ) {
 		identity_security_kit_log_event( 'profile_update_rejected', 'warning', $current_user_id, array( 'reason' => 'invalid_email' ) );
 		identity_security_kit_redirect( 'profile', array( 'profile' => 'invalid_email' ) );
+	}
+
+	if ( ! empty( $settings['phone_required'] ) && '' === trim( $phone ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'phone_required' ) );
+	}
+	$normalized_phone = '';
+	if ( '' !== trim( $phone ) ) {
+		$phone_validation = identity_security_kit_validate_unique_phone( $phone, $current_user_id );
+		if ( is_wp_error( $phone_validation ) ) {
+			identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $phone_validation->get_error_code() ) ) );
+		}
+		$normalized_phone = $phone_validation;
+		$phone_changed     = $current_phone !== $normalized_phone;
 	}
 
 	$email_owner = email_exists( $email );
@@ -422,6 +475,16 @@ function identity_security_kit_handle_profile_update() {
 		identity_security_kit_redirect( 'profile', array( 'profile' => 'failed' ) );
 	}
 
+	if ( '' !== $normalized_phone ) {
+		$phone_result = identity_security_kit_set_user_phone( $current_user_id, $normalized_phone );
+		if ( is_wp_error( $phone_result ) ) {
+			identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $phone_result->get_error_code() ) ) );
+		}
+		if ( $phone_changed ) {
+			update_user_meta( $current_user_id, 'identity_phone_verified', '0' );
+		}
+	}
+
 	$redirect_args = array( 'profile' => 'success' );
 
 	if ( $email_changed && function_exists( 'identity_security_kit_create_email_verification_challenge' ) ) {
@@ -432,6 +495,10 @@ function identity_security_kit_handle_profile_update() {
 		} else {
 			$redirect_args['verify'] = 'pending';
 		}
+	}
+
+	if ( isset( $user_data['user_pass'] ) && function_exists( 'identity_security_kit_destroy_other_sessions' ) ) {
+		identity_security_kit_destroy_other_sessions( $current_user_id );
 	}
 
 	identity_security_kit_log_event( 'profile_update_success', 'success', $current_user_id );

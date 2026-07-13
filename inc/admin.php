@@ -185,6 +185,26 @@ function identity_security_kit_render_admin_page() {
 							<td><input id="isk_email_otp_resend_minutes" class="small-text" name="email_otp_resend_minutes" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['email_otp_resend_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?></td>
 						</tr>
 						<tr>
+							<th scope="row"><?php esc_html_e( 'International phone', 'identity-security-kit' ); ?></th>
+							<td><label><input name="phone_required" type="checkbox" value="1" <?php checked( 1, $settings['phone_required'] ); ?>> <?php esc_html_e( 'Require a unique E.164 phone number during registration and profile updates.', 'identity-security-kit' ); ?></label></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'MFA enforcement', 'identity-security-kit' ); ?></th>
+							<td><label><input name="mfa_enforcement_enabled" type="checkbox" value="1" <?php checked( 1, $settings['mfa_enforcement_enabled'] ); ?>> <?php esc_html_e( 'Require MFA for accounts matching the capabilities below.', 'identity-security-kit' ); ?></label></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_mfa_grace_days"><?php esc_html_e( 'MFA grace period', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_mfa_grace_days" class="small-text" name="mfa_grace_days" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['mfa_grace_days'] ); ?>"> <?php esc_html_e( 'days', 'identity-security-kit' ); ?><p class="description"><?php esc_html_e( 'Privileged wp-admin access is blocked after this deadline until MFA is configured.', 'identity-security-kit' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_mfa_attempts_per_window"><?php esc_html_e( 'MFA attempts', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_mfa_attempts_per_window" class="small-text" name="mfa_attempts_per_window" type="number" min="3" max="10" value="<?php echo esc_attr( $settings['mfa_attempts_per_window'] ); ?>"><p class="description"><?php esc_html_e( 'This limit cannot be bypassed by administrators.', 'identity-security-kit' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_mfa_required_capabilities"><?php esc_html_e( 'Capabilities requiring MFA', 'identity-security-kit' ); ?></label></th>
+							<td><textarea id="isk_mfa_required_capabilities" name="mfa_required_capabilities" rows="5" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['mfa_required_capabilities'] ) ); ?></textarea><p class="description"><?php esc_html_e( 'One capability per line. A matching account receives the grace period.', 'identity-security-kit' ); ?></p></td>
+						</tr>
+						<tr>
 							<th scope="row"><label for="isk_login_attempts_per_window"><?php esc_html_e( 'Login attempts', 'identity-security-kit' ); ?></label></th>
 							<td>
 								<input id="isk_login_attempts_per_window" class="small-text" name="login_attempts_per_window" type="number" min="3" max="60" value="<?php echo esc_attr( $settings['login_attempts_per_window'] ); ?>">
@@ -235,6 +255,8 @@ function identity_security_kit_render_admin_page() {
 				<ul class="isk-list">
 					<li><?php esc_html_e( 'Email verification challenges with hashed one-time tokens', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Email OTP challenges with bounded expiry, attempts and one-time consumption', 'identity-security-kit' ); ?></li>
+					<li><?php esc_html_e( 'Encrypted RFC 6238 authenticator secrets with replay prevention', 'identity-security-kit' ); ?></li>
+					<li><?php esc_html_e( 'Hashed one-time recovery codes and capability-based MFA grace policy', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Profile upload validation and bounded image dimensions', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Password reset flow without account enumeration', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Security audit events without raw secrets or tokens', 'identity-security-kit' ); ?></li>
@@ -309,6 +331,11 @@ function identity_security_kit_handle_save_settings() {
 		'email_otp_length'                    => isset( $_POST['email_otp_length'] ) ? max( 6, min( 8, absint( $_POST['email_otp_length'] ) ) ) : 6,
 		'email_otp_max_attempts'              => isset( $_POST['email_otp_max_attempts'] ) ? max( 3, min( 10, absint( $_POST['email_otp_max_attempts'] ) ) ) : 5,
 		'email_otp_resend_minutes'            => isset( $_POST['email_otp_resend_minutes'] ) ? max( 1, min( 30, absint( $_POST['email_otp_resend_minutes'] ) ) ) : 2,
+		'phone_required'                      => isset( $_POST['phone_required'] ) ? 1 : 0,
+		'mfa_enforcement_enabled'             => isset( $_POST['mfa_enforcement_enabled'] ) ? 1 : 0,
+		'mfa_grace_days'                      => isset( $_POST['mfa_grace_days'] ) ? max( 1, min( 30, absint( $_POST['mfa_grace_days'] ) ) ) : 15,
+		'mfa_attempts_per_window'             => isset( $_POST['mfa_attempts_per_window'] ) ? max( 3, min( 10, absint( $_POST['mfa_attempts_per_window'] ) ) ) : 5,
+		'mfa_required_capabilities'           => isset( $_POST['mfa_required_capabilities'] ) ? array_values( array_unique( array_filter( array_map( 'sanitize_key', preg_split( '/[\s,]+/', wp_unslash( $_POST['mfa_required_capabilities'] ) ) ) ) ) ) : array(),
 	);
 
 	update_option( 'identity_security_kit_settings', $settings, false );

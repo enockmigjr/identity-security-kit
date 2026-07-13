@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.2.0' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.3.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -30,7 +30,7 @@ function identity_security_kit_get_capabilities() {
 /**
  * Return safe default settings.
  *
- * @return array<string,int>
+ * @return array<string,mixed>
  */
 function identity_security_kit_get_default_settings() {
 	return array(
@@ -48,13 +48,18 @@ function identity_security_kit_get_default_settings() {
 		'email_otp_length'                    => 6,
 		'email_otp_max_attempts'              => 5,
 		'email_otp_resend_minutes'            => 2,
+		'phone_required'                      => 1,
+		'mfa_enforcement_enabled'             => 1,
+		'mfa_grace_days'                      => 15,
+		'mfa_attempts_per_window'             => 5,
+		'mfa_required_capabilities'           => array( 'edit_posts', 'upload_files', 'manage_options' ),
 	);
 }
 
 /**
  * Return normalized plugin settings.
  *
- * @return array<string,int>
+ * @return array<string,mixed>
  */
 function identity_security_kit_get_settings() {
 	$settings = get_option( 'identity_security_kit_settings', array() );
@@ -75,6 +80,12 @@ function identity_security_kit_get_settings() {
 	$settings['email_otp_length']                    = max( 6, min( 8, absint( $settings['email_otp_length'] ) ) );
 	$settings['email_otp_max_attempts']              = max( 3, min( 10, absint( $settings['email_otp_max_attempts'] ) ) );
 	$settings['email_otp_resend_minutes']            = max( 1, min( 30, absint( $settings['email_otp_resend_minutes'] ) ) );
+	$settings['phone_required']                      = empty( $settings['phone_required'] ) ? 0 : 1;
+	$settings['mfa_enforcement_enabled']             = empty( $settings['mfa_enforcement_enabled'] ) ? 0 : 1;
+	$settings['mfa_grace_days']                      = max( 1, min( 30, absint( $settings['mfa_grace_days'] ) ) );
+	$settings['mfa_attempts_per_window']             = max( 3, min( 10, absint( $settings['mfa_attempts_per_window'] ) ) );
+	$settings['mfa_required_capabilities']           = is_array( $settings['mfa_required_capabilities'] ) ? $settings['mfa_required_capabilities'] : preg_split( '/[\s,]+/', (string) $settings['mfa_required_capabilities'] );
+	$settings['mfa_required_capabilities']           = array_values( array_unique( array_filter( array_map( 'sanitize_key', $settings['mfa_required_capabilities'] ) ) ) );
 
 	return $settings;
 }
@@ -100,15 +111,16 @@ function identity_security_kit_get_rate_limit_fingerprint() {
  *
  * @param string $bucket Bucket name.
  * @param int    $limit  Max attempts.
- * @param int    $window Window in seconds.
+ * @param int  $window                  Window in seconds.
+ * @param bool $allow_privileged_bypass Whether security managers bypass this bucket.
  * @return bool
  */
-function identity_security_kit_rate_limit( $bucket, $limit, $window ) {
+function identity_security_kit_rate_limit( $bucket, $limit, $window, $allow_privileged_bypass = true ) {
 	$bucket = sanitize_key( $bucket );
 	$limit  = max( 1, absint( $limit ) );
 	$window = max( MINUTE_IN_SECONDS, absint( $window ) );
 
-	if ( current_user_can( 'identity_manage_security' ) || current_user_can( 'manage_options' ) ) {
+	if ( $allow_privileged_bypass && ( current_user_can( 'identity_manage_security' ) || current_user_can( 'manage_options' ) ) ) {
 		return true;
 	}
 
@@ -276,5 +288,12 @@ add_action( 'admin_init', 'identity_security_kit_maybe_upgrade' );
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/audit.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-verification.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-otp.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/phone.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/secret-storage.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/totp-algorithm.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-ui.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-login.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-policy.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/auth-handlers.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/admin.php';
