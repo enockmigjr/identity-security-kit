@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.3.0
+ * Version: 0.4.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.3.0' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.4.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -48,11 +48,17 @@ function identity_security_kit_get_default_settings() {
 		'email_otp_length'                    => 6,
 		'email_otp_max_attempts'              => 5,
 		'email_otp_resend_minutes'            => 2,
+		'sms_otp_ttl_minutes'                 => 10,
+		'sms_otp_length'                      => 6,
+		'sms_otp_max_attempts'                => 5,
+		'sms_otp_resend_minutes'              => 2,
+		'sms_provider'                        => 'disabled',
 		'phone_required'                      => 1,
 		'mfa_enforcement_enabled'             => 1,
 		'mfa_grace_days'                      => 15,
 		'mfa_attempts_per_window'             => 5,
 		'mfa_required_capabilities'           => array( 'edit_posts', 'upload_files', 'manage_options' ),
+		'mfa_allowed_methods'                 => array( 'totp', 'email', 'sms' ),
 	);
 }
 
@@ -80,12 +86,22 @@ function identity_security_kit_get_settings() {
 	$settings['email_otp_length']                    = max( 6, min( 8, absint( $settings['email_otp_length'] ) ) );
 	$settings['email_otp_max_attempts']              = max( 3, min( 10, absint( $settings['email_otp_max_attempts'] ) ) );
 	$settings['email_otp_resend_minutes']            = max( 1, min( 30, absint( $settings['email_otp_resend_minutes'] ) ) );
+	$settings['sms_otp_ttl_minutes']                 = max( 2, min( 30, absint( $settings['sms_otp_ttl_minutes'] ) ) );
+	$settings['sms_otp_length']                      = max( 6, min( 8, absint( $settings['sms_otp_length'] ) ) );
+	$settings['sms_otp_max_attempts']                = max( 3, min( 10, absint( $settings['sms_otp_max_attempts'] ) ) );
+	$settings['sms_otp_resend_minutes']              = max( 1, min( 30, absint( $settings['sms_otp_resend_minutes'] ) ) );
+	$settings['sms_provider']                        = in_array( sanitize_key( $settings['sms_provider'] ), array( 'disabled', 'twilio', 'custom' ), true ) ? sanitize_key( $settings['sms_provider'] ) : 'disabled';
 	$settings['phone_required']                      = empty( $settings['phone_required'] ) ? 0 : 1;
 	$settings['mfa_enforcement_enabled']             = empty( $settings['mfa_enforcement_enabled'] ) ? 0 : 1;
 	$settings['mfa_grace_days']                      = max( 1, min( 30, absint( $settings['mfa_grace_days'] ) ) );
 	$settings['mfa_attempts_per_window']             = max( 3, min( 10, absint( $settings['mfa_attempts_per_window'] ) ) );
 	$settings['mfa_required_capabilities']           = is_array( $settings['mfa_required_capabilities'] ) ? $settings['mfa_required_capabilities'] : preg_split( '/[\s,]+/', (string) $settings['mfa_required_capabilities'] );
 	$settings['mfa_required_capabilities']           = array_values( array_unique( array_filter( array_map( 'sanitize_key', $settings['mfa_required_capabilities'] ) ) ) );
+	$settings['mfa_allowed_methods']                 = is_array( $settings['mfa_allowed_methods'] ) ? $settings['mfa_allowed_methods'] : array();
+	$settings['mfa_allowed_methods']                 = array_values( array_intersect( array( 'totp', 'email', 'sms' ), array_map( 'sanitize_key', $settings['mfa_allowed_methods'] ) ) );
+	if ( empty( $settings['mfa_allowed_methods'] ) ) {
+		$settings['mfa_allowed_methods'] = array( 'totp' );
+	}
 
 	return $settings;
 }
@@ -250,6 +266,32 @@ function identity_security_kit_install_schema() {
 	) {$charset_collate};";
 
 	dbDelta( $otp_sql );
+
+	$shared_otp_table = identity_security_kit_get_otp_table();
+	$shared_otp_sql   = "CREATE TABLE {$shared_otp_table} (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		user_id bigint(20) unsigned NOT NULL,
+		purpose varchar(64) NOT NULL,
+		channel varchar(16) NOT NULL,
+		destination_hash char(64) NOT NULL,
+		code_hash varchar(255) NOT NULL,
+		status varchar(24) NOT NULL DEFAULT 'pending',
+		attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+		max_attempts smallint(5) unsigned NOT NULL,
+		expires_at datetime NOT NULL,
+		created_at datetime NOT NULL,
+		consumed_at datetime NULL,
+		correlation_id varchar(36) NOT NULL,
+		idempotency_key char(64) NOT NULL,
+		PRIMARY KEY  (id),
+		KEY user_flow (user_id, purpose, channel),
+		KEY destination_hash (destination_hash),
+		KEY status (status),
+		KEY expires_at (expires_at),
+		UNIQUE KEY idempotency_key (idempotency_key)
+	) {$charset_collate};";
+
+	dbDelta( $shared_otp_sql );
 }
 
 /**
@@ -287,11 +329,16 @@ add_action( 'admin_init', 'identity_security_kit_maybe_upgrade' );
 
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/audit.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-verification.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/otp.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-otp.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/phone.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/sms-provider.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/phone-otp.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/secret-storage.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/totp-algorithm.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-methods.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-channels-ui.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-ui.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-login.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-policy.php';

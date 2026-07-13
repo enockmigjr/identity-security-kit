@@ -188,7 +188,7 @@ function identity_security_kit_handle_login() {
 	}
 
 	$redirect_key = user_can( $user, 'photovault_manage_media' ) || user_can( $user, 'manage_options' ) ? 'dashboard' : 'after_login';
-	if ( function_exists( 'identity_security_kit_is_totp_enabled' ) && identity_security_kit_is_totp_enabled( $user->ID ) ) {
+	if ( function_exists( 'identity_security_kit_user_has_mfa_method' ) && identity_security_kit_user_has_mfa_method( $user->ID ) ) {
 		$challenge_url = identity_security_kit_create_login_challenge( $user->ID, $remember, identity_security_kit_get_route_url( $redirect_key ) );
 		if ( is_wp_error( $challenge_url ) ) {
 			identity_security_kit_log_event( 'login_mfa_challenge_failed', 'failure', $user->ID, array( 'reason' => $challenge_url->get_error_code() ) );

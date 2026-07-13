@@ -185,6 +185,14 @@ function identity_security_kit_render_admin_page() {
 							<td><input id="isk_email_otp_resend_minutes" class="small-text" name="email_otp_resend_minutes" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['email_otp_resend_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?></td>
 						</tr>
 						<tr>
+							<th scope="row"><label for="isk_sms_provider"><?php esc_html_e( 'SMS provider', 'identity-security-kit' ); ?></label></th>
+							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p class="description"><?php esc_html_e( 'Provider credentials must be injected with environment variables or constants, never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_sms_otp_ttl_minutes"><?php esc_html_e( 'SMS OTP policy', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_sms_otp_ttl_minutes" class="small-text" name="sms_otp_ttl_minutes" type="number" min="2" max="30" value="<?php echo esc_attr( $settings['sms_otp_ttl_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?> <input class="small-text" name="sms_otp_max_attempts" type="number" min="3" max="10" value="<?php echo esc_attr( $settings['sms_otp_max_attempts'] ); ?>"> <?php esc_html_e( 'attempts', 'identity-security-kit' ); ?> <input class="small-text" name="sms_otp_resend_minutes" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['sms_otp_resend_minutes'] ); ?>"> <?php esc_html_e( 'minutes before resend', 'identity-security-kit' ); ?></td>
+						</tr>
+						<tr>
 							<th scope="row"><?php esc_html_e( 'International phone', 'identity-security-kit' ); ?></th>
 							<td><label><input name="phone_required" type="checkbox" value="1" <?php checked( 1, $settings['phone_required'] ); ?>> <?php esc_html_e( 'Require a unique E.164 phone number during registration and profile updates.', 'identity-security-kit' ); ?></label></td>
 						</tr>
@@ -199,6 +207,10 @@ function identity_security_kit_render_admin_page() {
 						<tr>
 							<th scope="row"><label for="isk_mfa_attempts_per_window"><?php esc_html_e( 'MFA attempts', 'identity-security-kit' ); ?></label></th>
 							<td><input id="isk_mfa_attempts_per_window" class="small-text" name="mfa_attempts_per_window" type="number" min="3" max="10" value="<?php echo esc_attr( $settings['mfa_attempts_per_window'] ); ?>"><p class="description"><?php esc_html_e( 'This limit cannot be bypassed by administrators.', 'identity-security-kit' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Allowed MFA methods', 'identity-security-kit' ); ?></th>
+							<td><?php foreach ( array( 'totp', 'email', 'sms' ) as $method ) : ?><label style="margin-right:16px"><input type="checkbox" name="mfa_allowed_methods[]" value="<?php echo esc_attr( $method ); ?>" <?php checked( in_array( $method, $settings['mfa_allowed_methods'], true ) ); ?>> <?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?></label><?php endforeach; ?></td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_mfa_required_capabilities"><?php esc_html_e( 'Capabilities requiring MFA', 'identity-security-kit' ); ?></label></th>
@@ -331,14 +343,21 @@ function identity_security_kit_handle_save_settings() {
 		'email_otp_length'                    => isset( $_POST['email_otp_length'] ) ? max( 6, min( 8, absint( $_POST['email_otp_length'] ) ) ) : 6,
 		'email_otp_max_attempts'              => isset( $_POST['email_otp_max_attempts'] ) ? max( 3, min( 10, absint( $_POST['email_otp_max_attempts'] ) ) ) : 5,
 		'email_otp_resend_minutes'            => isset( $_POST['email_otp_resend_minutes'] ) ? max( 1, min( 30, absint( $_POST['email_otp_resend_minutes'] ) ) ) : 2,
+		'sms_otp_ttl_minutes'                 => isset( $_POST['sms_otp_ttl_minutes'] ) ? max( 2, min( 30, absint( $_POST['sms_otp_ttl_minutes'] ) ) ) : 10,
+		'sms_otp_length'                      => 6,
+		'sms_otp_max_attempts'                => isset( $_POST['sms_otp_max_attempts'] ) ? max( 3, min( 10, absint( $_POST['sms_otp_max_attempts'] ) ) ) : 5,
+		'sms_otp_resend_minutes'              => isset( $_POST['sms_otp_resend_minutes'] ) ? max( 1, min( 30, absint( $_POST['sms_otp_resend_minutes'] ) ) ) : 2,
+		'sms_provider'                        => isset( $_POST['sms_provider'] ) && in_array( sanitize_key( wp_unslash( $_POST['sms_provider'] ) ), array( 'disabled', 'twilio', 'custom' ), true ) ? sanitize_key( wp_unslash( $_POST['sms_provider'] ) ) : 'disabled',
 		'phone_required'                      => isset( $_POST['phone_required'] ) ? 1 : 0,
 		'mfa_enforcement_enabled'             => isset( $_POST['mfa_enforcement_enabled'] ) ? 1 : 0,
 		'mfa_grace_days'                      => isset( $_POST['mfa_grace_days'] ) ? max( 1, min( 30, absint( $_POST['mfa_grace_days'] ) ) ) : 15,
 		'mfa_attempts_per_window'             => isset( $_POST['mfa_attempts_per_window'] ) ? max( 3, min( 10, absint( $_POST['mfa_attempts_per_window'] ) ) ) : 5,
 		'mfa_required_capabilities'           => isset( $_POST['mfa_required_capabilities'] ) ? array_values( array_unique( array_filter( array_map( 'sanitize_key', preg_split( '/[\s,]+/', wp_unslash( $_POST['mfa_required_capabilities'] ) ) ) ) ) ) : array(),
+		'mfa_allowed_methods'                 => isset( $_POST['mfa_allowed_methods'] ) && is_array( $_POST['mfa_allowed_methods'] ) ? array_values( array_intersect( array( 'totp', 'email', 'sms' ), array_map( 'sanitize_key', wp_unslash( $_POST['mfa_allowed_methods'] ) ) ) ) : array( 'totp' ),
 	);
 
 	update_option( 'identity_security_kit_settings', $settings, false );
+	identity_security_kit_log_event( 'identity_settings_changed', 'success' );
 	wp_safe_redirect( admin_url( 'admin.php?page=identity-security-kit&settings-updated=true' ) );
 	exit;
 }

@@ -105,9 +105,13 @@ function identity_security_kit_handle_totp_disable() {
 	}
 	delete_user_meta( $user_id, identity_security_kit_totp_secret_meta_key() );
 	delete_user_meta( $user_id, 'identity_mfa_totp_last_counter' );
-	delete_user_meta( $user_id, 'identity_mfa_recovery_codes' );
-	delete_user_meta( $user_id, 'identity_mfa_enabled_at' );
-	update_user_meta( $user_id, 'identity_mfa_grace_started_at', time() );
+	if ( ! identity_security_kit_user_has_mfa_method( $user_id ) ) {
+		delete_user_meta( $user_id, 'identity_mfa_recovery_codes' );
+		delete_user_meta( $user_id, 'identity_mfa_enabled_at' );
+		update_user_meta( $user_id, 'identity_mfa_grace_started_at', time() );
+	} elseif ( 'totp' === (string) get_user_meta( $user_id, 'identity_mfa_preferred_method', true ) ) {
+		update_user_meta( $user_id, 'identity_mfa_preferred_method', identity_security_kit_get_preferred_mfa_method( $user_id ) );
+	}
 	identity_security_kit_destroy_other_sessions( $user_id );
 	identity_security_kit_send_security_notification( $user_id, __( 'Authenticator verification was disabled on your account.', 'identity-security-kit' ) );
 	identity_security_kit_log_event( 'totp_disabled', 'warning', $user_id );
@@ -146,6 +150,12 @@ function identity_security_kit_render_mfa_panel() {
 		'totp_replayed'         => __( 'This authenticator code was already used.', 'identity-security-kit' ),
 		'recovery_code_invalid' => __( 'The recovery code is invalid.', 'identity-security-kit' ),
 		'mfa_rate_limited'      => __( 'Too many attempts. Try again later.', 'identity-security-kit' ),
+		'channel_code_sent'     => __( 'A security code was sent. Enter it to enable the method.', 'identity-security-kit' ),
+		'preference_saved'      => __( 'Preferred verification method saved.', 'identity-security-kit' ),
+		'method_not_allowed'    => __( 'This verification method is not allowed.', 'identity-security-kit' ),
+		'email_not_verified'    => __( 'Verify the account email before enabling email MFA.', 'identity-security-kit' ),
+		'phone_not_verified'    => __( 'Verify the phone number before enabling SMS MFA.', 'identity-security-kit' ),
+		'sms_provider_not_configured' => __( 'The SMS provider is not configured.', 'identity-security-kit' ),
 	);
 
 	ob_start();
@@ -175,6 +185,7 @@ function identity_security_kit_render_mfa_panel() {
 			<p><?php esc_html_e( 'Use any RFC 6238 compatible authenticator application.', 'identity-security-kit' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_totp_start"><?php wp_nonce_field( 'identity_security_kit_totp_start' ); ?><label><?php esc_html_e( 'Current password', 'identity-security-kit' ); ?> <input type="password" name="current_password" autocomplete="current-password" required></label> <button type="submit"><?php esc_html_e( 'Configure authenticator', 'identity-security-kit' ); ?></button></form>
 		<?php endif; ?>
+		<?php echo identity_security_kit_render_mfa_channels_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 	</div>
 	<?php
 

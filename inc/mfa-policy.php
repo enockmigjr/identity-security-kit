@@ -52,7 +52,7 @@ function identity_security_kit_user_requires_mfa( $user ) {
  * @return bool
  */
 function identity_security_kit_user_has_mfa( $user_id ) {
-	$enabled = identity_security_kit_is_totp_enabled( absint( $user_id ) );
+	$enabled = function_exists( 'identity_security_kit_user_has_mfa_method' ) && identity_security_kit_user_has_mfa_method( absint( $user_id ) );
 
 	return (bool) apply_filters( 'identity_security_kit_user_has_mfa', $enabled, absint( $user_id ) );
 }
