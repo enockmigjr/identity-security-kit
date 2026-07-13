@@ -13,6 +13,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Normaliser et rendre uniques les numeros internationaux E.164, puis verifier leur possession par OTP SMS.
 - Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
 - Enroler et verifier les facteurs TOTP, email et SMS, avec choix de methode au login.
+- Desactiver les facteurs TOTP, email et SMS apres re-authentification, sans permettre a un compte soumis au MFA de retirer son dernier facteur.
 - Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
 - Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
 - Permettre le renvoi de verification email avec session + nonce.
@@ -71,6 +72,8 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `admin_post_identity_security_kit_recovery_regenerate`
 - `admin_post_identity_security_kit_channel_mfa_start`
 - `admin_post_identity_security_kit_channel_mfa_confirm`
+- `admin_post_identity_security_kit_channel_mfa_disable_start`
+- `admin_post_identity_security_kit_channel_mfa_disable_confirm`
 - `admin_post_identity_security_kit_mfa_preference`
 - `admin_post_nopriv_identity_security_kit_confirm_email_change`
 - `admin_post_identity_security_kit_confirm_email_change`
@@ -113,7 +116,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 4. Confirmer que les reglages restent bornes avec des valeurs POST extremes.
 5. Verifier que l'audit ne stocke pas mot de passe, reset key, token brut ou IP brute.
 6. Executer `php tests/run.php`, `php tests/otp.php` et `php tests/sms-provider.php`.
-7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA et grace 15 jours.
+7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA, cycle de vie des facteurs et grace 15 jours.
 8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
@@ -122,7 +125,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 
 - Validation des plans de numerotation par une librairie reconnue et UX pays/indicatif.
 - QR Code TOTP accessible.
-- Desactivation et remplacement email/SMS avec re-authentification et facteur existant.
+- Remplacement guide des facteurs et validation des changements concurrents en navigateur.
 - Provider SMS reel valide en staging/production; les tests actuels utilisent l'adaptateur generique controle.
 - Rappels de grace MFA, changement de policy/capabilities et cas multisite.
 - Tests navigateur du login natif et matrice d'autorisation wp-admin/AJAX.

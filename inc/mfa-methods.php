@@ -59,6 +59,55 @@ function identity_security_kit_user_has_mfa_method( $user_id ) {
 	return array() !== identity_security_kit_get_user_mfa_methods( $user_id );
 }
 
+/** Check whether an enrolled factor may be removed without violating policy. */
+function identity_security_kit_can_disable_mfa_method( $user_id, $method ) {
+	$user_id = absint( $user_id );
+	$method  = sanitize_key( $method );
+	$methods = identity_security_kit_get_user_mfa_methods( $user_id );
+	if ( ! in_array( $method, $methods, true ) ) {
+		return new WP_Error( 'method_not_enabled', __( 'This verification method is not enabled.', 'identity-security-kit' ) );
+	}
+	if ( identity_security_kit_user_requires_mfa( $user_id ) && 1 === count( $methods ) ) {
+		return new WP_Error( 'mfa_last_factor_required', __( 'This account must keep at least one verification method.', 'identity-security-kit' ) );
+	}
+
+	return true;
+}
+
+/** Remove an MFA factor after its authorization proof has been verified. */
+function identity_security_kit_disable_mfa_method( $user_id, $method ) {
+	$user_id = absint( $user_id );
+	$method  = sanitize_key( $method );
+	$allowed = identity_security_kit_can_disable_mfa_method( $user_id, $method );
+	if ( is_wp_error( $allowed ) ) {
+		return $allowed;
+	}
+
+	if ( 'totp' === $method ) {
+		delete_user_meta( $user_id, identity_security_kit_totp_secret_meta_key() );
+		delete_user_meta( $user_id, 'identity_mfa_totp_last_counter' );
+		delete_user_meta( $user_id, 'identity_mfa_totp_pending' );
+	} else {
+		delete_user_meta( $user_id, 'identity_mfa_' . $method . '_enabled' );
+	}
+
+	$remaining = identity_security_kit_get_user_mfa_methods( $user_id );
+	if ( empty( $remaining ) ) {
+		delete_user_meta( $user_id, 'identity_mfa_recovery_codes' );
+		delete_user_meta( $user_id, 'identity_mfa_enabled_at' );
+		delete_user_meta( $user_id, 'identity_mfa_preferred_method' );
+	} elseif ( $method === (string) get_user_meta( $user_id, 'identity_mfa_preferred_method', true ) ) {
+		update_user_meta( $user_id, 'identity_mfa_preferred_method', identity_security_kit_get_preferred_mfa_method( $user_id ) );
+	}
+
+	identity_security_kit_destroy_other_sessions( $user_id );
+	identity_security_kit_send_security_notification( $user_id, sprintf( __( '%s was disabled as a two-factor authentication method.', 'identity-security-kit' ), identity_security_kit_get_mfa_method_label( $method ) ) );
+	identity_security_kit_log_event( 'mfa_factor_disabled', 'warning', $user_id, array( 'method' => $method ) );
+	do_action( 'identity_security_kit_mfa_disabled', $user_id, $method );
+
+	return true;
+}
+
 /** Return a preferred available method, favoring TOTP by default. */
 function identity_security_kit_get_preferred_mfa_method( $user_id ) {
 	$methods   = identity_security_kit_get_user_mfa_methods( $user_id );
@@ -162,6 +211,45 @@ function identity_security_kit_enable_channel_mfa( $user_id, $method, $challenge
 	return array( 'recovery_token' => $recovery_token );
 }
 
+/** Start removal of an email or SMS factor by issuing an OTP to that channel. */
+function identity_security_kit_start_channel_mfa_disable( $user_id, $method ) {
+	$user_id = absint( $user_id );
+	$method  = sanitize_key( $method );
+	if ( ! in_array( $method, array( 'email', 'sms' ), true ) ) {
+		return new WP_Error( 'method_not_allowed', __( 'This verification method is not available.', 'identity-security-kit' ) );
+	}
+	$allowed = identity_security_kit_can_disable_mfa_method( $user_id, $method );
+	if ( is_wp_error( $allowed ) ) {
+		return $allowed;
+	}
+
+	$purpose = 'mfa_disable_' . $method;
+	return 'email' === $method
+		? identity_security_kit_create_email_otp_challenge( $user_id, $purpose )
+		: identity_security_kit_create_phone_otp_challenge( $user_id, $purpose );
+}
+
+/** Verify a channel OTP and remove the corresponding MFA factor. */
+function identity_security_kit_confirm_channel_mfa_disable( $user_id, $method, $challenge_id, $code ) {
+	$user_id      = absint( $user_id );
+	$method       = sanitize_key( $method );
+	$challenge_id = absint( $challenge_id );
+	$allowed      = identity_security_kit_can_disable_mfa_method( $user_id, $method );
+	if ( is_wp_error( $allowed ) || ! in_array( $method, array( 'email', 'sms' ), true ) ) {
+		return is_wp_error( $allowed ) ? $allowed : new WP_Error( 'method_not_allowed', __( 'This verification method is not available.', 'identity-security-kit' ) );
+	}
+
+	$purpose = 'mfa_disable_' . $method;
+	$verify  = 'email' === $method
+		? identity_security_kit_verify_email_otp_challenge( $challenge_id, $user_id, $code, $purpose )
+		: identity_security_kit_verify_phone_otp_challenge( $challenge_id, $user_id, $code, $purpose );
+	if ( is_wp_error( $verify ) ) {
+		return $verify;
+	}
+
+	return identity_security_kit_disable_mfa_method( $user_id, $method );
+}
+
 /** Start email or SMS factor enrollment after password re-authentication. */
 function identity_security_kit_handle_channel_mfa_start() {
 	$user_id = identity_security_kit_require_authenticated_user();
@@ -210,6 +298,42 @@ function identity_security_kit_handle_channel_mfa_confirm() {
 	identity_security_kit_mfa_redirect( array( 'mfa' => 'enabled', 'recovery' => $result['recovery_token'] ) );
 }
 add_action( 'admin_post_identity_security_kit_channel_mfa_confirm', 'identity_security_kit_handle_channel_mfa_confirm' );
+
+/** Start email or SMS factor removal after password re-authentication. */
+function identity_security_kit_handle_channel_mfa_disable_start() {
+	$user_id = identity_security_kit_require_authenticated_user();
+	check_admin_referer( 'identity_security_kit_channel_mfa_disable_start' );
+	$method   = isset( $_POST['mfa_method'] ) ? sanitize_key( wp_unslash( $_POST['mfa_method'] ) ) : '';
+	$password = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
+	$user     = get_userdata( $user_id );
+	if ( ! $user || ! wp_check_password( $password, $user->user_pass, $user_id ) ) {
+		identity_security_kit_mfa_redirect( array( 'mfa' => 'password_invalid' ) );
+	}
+	$result = identity_security_kit_start_channel_mfa_disable( $user_id, $method );
+	identity_security_kit_mfa_redirect(
+		array(
+			'mfa'                   => is_wp_error( $result ) ? sanitize_key( $result->get_error_code() ) : 'disable_code_sent',
+			'mfa_disable_method'    => $method,
+			'mfa_disable_challenge' => is_wp_error( $result ) ? 0 : absint( $result ),
+		)
+	);
+}
+add_action( 'admin_post_identity_security_kit_channel_mfa_disable_start', 'identity_security_kit_handle_channel_mfa_disable_start' );
+
+/** Confirm email or SMS factor removal. */
+function identity_security_kit_handle_channel_mfa_disable_confirm() {
+	$user_id = identity_security_kit_require_authenticated_user();
+	check_admin_referer( 'identity_security_kit_channel_mfa_disable_confirm' );
+	$method       = isset( $_POST['mfa_method'] ) ? sanitize_key( wp_unslash( $_POST['mfa_method'] ) ) : '';
+	$challenge_id = isset( $_POST['challenge_id'] ) ? absint( $_POST['challenge_id'] ) : 0;
+	$code         = isset( $_POST['otp_code'] ) ? sanitize_text_field( wp_unslash( $_POST['otp_code'] ) ) : '';
+	$result       = identity_security_kit_confirm_channel_mfa_disable( $user_id, $method, $challenge_id, $code );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_mfa_redirect( array( 'mfa' => sanitize_key( $result->get_error_code() ), 'mfa_disable_method' => $method, 'mfa_disable_challenge' => $challenge_id ) );
+	}
+	identity_security_kit_mfa_redirect( array( 'mfa' => 'disabled' ) );
+}
+add_action( 'admin_post_identity_security_kit_channel_mfa_disable_confirm', 'identity_security_kit_handle_channel_mfa_disable_confirm' );
 
 /** Save the preferred factor after password re-authentication. */
 function identity_security_kit_handle_mfa_preference() {

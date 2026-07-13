@@ -223,6 +223,30 @@ try {
 	$consumed    = identity_security_kit_consume_login_challenge( $login_token, $future_code, 'totp' );
 	identity_runtime_assert( ! is_wp_error( $consumed ), 'TOTP MFA login challenge failed.' );
 
+	$email_messages = array();
+	$disable_id     = identity_security_kit_start_channel_mfa_disable( $user_id, 'email' );
+	identity_runtime_assert( ! is_wp_error( $disable_id ) && 1 === count( $email_messages ), 'Email MFA removal challenge was not delivered.' );
+	preg_match( '/code is: ([0-9]{6,8})/', $email_messages[0]['message'], $matches );
+	$result = identity_security_kit_confirm_channel_mfa_disable( $user_id, 'email', $disable_id, $matches[1] ?? '' );
+	identity_runtime_assert( true === $result && ! identity_security_kit_is_mfa_method_enabled( $user_id, 'email' ), 'Email MFA factor was not removed after its OTP proof.' );
+
+	$sms_messages = array();
+	$disable_id   = identity_security_kit_start_channel_mfa_disable( $user_id, 'sms' );
+	identity_runtime_assert( ! is_wp_error( $disable_id ) && 1 === count( $sms_messages ), 'SMS MFA removal challenge was not delivered.' );
+	preg_match( '/code: ([0-9]{6,8})/', $sms_messages[0]['message'], $matches );
+	$result = identity_security_kit_confirm_channel_mfa_disable( $user_id, 'sms', $disable_id, $matches[1] ?? '' );
+	identity_runtime_assert( true === $result && ! identity_security_kit_is_mfa_method_enabled( $user_id, 'sms' ), 'SMS MFA factor was not removed after its OTP proof.' );
+	identity_runtime_assert( array( 'totp' ) === identity_security_kit_get_user_mfa_methods( $user_id ), 'Factor removal did not preserve the remaining TOTP method.' );
+	identity_runtime_assert( 'mfa_last_factor_required' === identity_runtime_error_code( identity_security_kit_disable_mfa_method( $user_id, 'totp' ) ), 'A required account removed its last MFA factor.' );
+	identity_runtime_assert( identity_security_kit_is_totp_enabled( $user_id ), 'The rejected last-factor removal changed account state.' );
+
+	update_user_meta( $duplicate_id, identity_security_kit_email_verified_meta_key(), '1' );
+	update_user_meta( $duplicate_id, 'identity_mfa_email_enabled', '1' );
+	update_user_meta( $duplicate_id, 'identity_mfa_enabled_at', gmdate( 'Y-m-d H:i:s' ) );
+	$result = identity_security_kit_disable_mfa_method( $duplicate_id, 'email' );
+	identity_runtime_assert( true === $result && ! identity_security_kit_user_has_mfa_method( $duplicate_id ), 'A non-required account could not remove its last factor.' );
+	identity_runtime_assert( '' === (string) get_user_meta( $duplicate_id, 'identity_mfa_grace_started_at', true ), 'Removing an optional last factor incorrectly started a grace period.' );
+
 	$grace_id = wp_insert_user(
 		array(
 			'user_login' => 'identity_grace_' . wp_generate_password( 6, false, false ),
@@ -245,6 +269,7 @@ try {
 			'otp_sms'            => 'provider_and_verification_validated',
 			'mfa_methods'        => identity_security_kit_get_user_mfa_methods( $user_id ),
 			'mfa_login'          => array( 'email', 'sms', 'totp', 'recovery' ),
+			'mfa_lifecycle'      => 'channel_removal_and_last_factor_policy_validated',
 			'mfa_grace_days'     => 15,
 		)
 	);

@@ -99,23 +99,18 @@ function identity_security_kit_handle_totp_disable() {
 	if ( ! $user || ! wp_check_password( $password, $user->user_pass, $user_id ) ) {
 		identity_security_kit_mfa_redirect( array( 'mfa' => 'password_invalid' ) );
 	}
+	$allowed = identity_security_kit_can_disable_mfa_method( $user_id, 'totp' );
+	if ( is_wp_error( $allowed ) ) {
+		identity_security_kit_mfa_redirect( array( 'mfa' => $allowed->get_error_code() ) );
+	}
 	$verify = identity_security_kit_verify_totp_or_recovery( $user_id, $code );
 	if ( is_wp_error( $verify ) ) {
 		identity_security_kit_mfa_redirect( array( 'mfa' => $verify->get_error_code() ) );
 	}
-	delete_user_meta( $user_id, identity_security_kit_totp_secret_meta_key() );
-	delete_user_meta( $user_id, 'identity_mfa_totp_last_counter' );
-	if ( ! identity_security_kit_user_has_mfa_method( $user_id ) ) {
-		delete_user_meta( $user_id, 'identity_mfa_recovery_codes' );
-		delete_user_meta( $user_id, 'identity_mfa_enabled_at' );
-		update_user_meta( $user_id, 'identity_mfa_grace_started_at', time() );
-	} elseif ( 'totp' === (string) get_user_meta( $user_id, 'identity_mfa_preferred_method', true ) ) {
-		update_user_meta( $user_id, 'identity_mfa_preferred_method', identity_security_kit_get_preferred_mfa_method( $user_id ) );
+	$result = identity_security_kit_disable_mfa_method( $user_id, 'totp' );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_mfa_redirect( array( 'mfa' => $result->get_error_code() ) );
 	}
-	identity_security_kit_destroy_other_sessions( $user_id );
-	identity_security_kit_send_security_notification( $user_id, __( 'Authenticator verification was disabled on your account.', 'identity-security-kit' ) );
-	identity_security_kit_log_event( 'totp_disabled', 'warning', $user_id );
-	do_action( 'identity_security_kit_mfa_disabled', $user_id, 'totp' );
 	identity_security_kit_mfa_redirect( array( 'mfa' => 'disabled' ) );
 }
 add_action( 'admin_post_identity_security_kit_totp_disable', 'identity_security_kit_handle_totp_disable' );
@@ -151,8 +146,11 @@ function identity_security_kit_render_mfa_panel() {
 		'recovery_code_invalid' => __( 'The recovery code is invalid.', 'identity-security-kit' ),
 		'mfa_rate_limited'      => __( 'Too many attempts. Try again later.', 'identity-security-kit' ),
 		'channel_code_sent'     => __( 'A security code was sent. Enter it to enable the method.', 'identity-security-kit' ),
+		'disable_code_sent'     => __( 'A security code was sent. Enter it to disable the method.', 'identity-security-kit' ),
 		'preference_saved'      => __( 'Preferred verification method saved.', 'identity-security-kit' ),
 		'method_not_allowed'    => __( 'This verification method is not allowed.', 'identity-security-kit' ),
+		'method_not_enabled'    => __( 'This verification method is not enabled.', 'identity-security-kit' ),
+		'mfa_last_factor_required' => __( 'This account must keep at least one verification method.', 'identity-security-kit' ),
 		'email_not_verified'    => __( 'Verify the account email before enabling email MFA.', 'identity-security-kit' ),
 		'phone_not_verified'    => __( 'Verify the phone number before enabling SMS MFA.', 'identity-security-kit' ),
 		'sms_provider_not_configured' => __( 'The SMS provider is not configured.', 'identity-security-kit' ),

@@ -143,6 +143,10 @@ function identity_security_kit_enforce_mfa_admin_access() {
 		'identity_security_kit_totp_cancel',
 		'identity_security_kit_recovery_regenerate',
 		'identity_security_kit_totp_disable',
+		'identity_security_kit_channel_mfa_start',
+		'identity_security_kit_channel_mfa_confirm',
+		'identity_security_kit_channel_mfa_disable_start',
+		'identity_security_kit_channel_mfa_disable_confirm',
 		'heartbeat',
 	);
 	if ( wp_doing_ajax() ) {
