@@ -92,6 +92,14 @@ function identity_security_kit_get_mfa_deadline( $user_id ) {
 	return $started ? $started + ( $days * DAY_IN_SECONDS ) : 0;
 }
 
+/** Return whether a required account is beyond its MFA grace deadline. */
+function identity_security_kit_is_mfa_grace_expired( $user_id, $now = 0 ) {
+	$deadline = identity_security_kit_get_mfa_deadline( absint( $user_id ) );
+	$now      = $now ? absint( $now ) : time();
+
+	return 0 !== $deadline && $now >= $deadline;
+}
+
 /** Initialize grace tracking after account or role changes. */
 function identity_security_kit_refresh_mfa_grace( $user_id ) {
 	identity_security_kit_ensure_mfa_grace_started( absint( $user_id ) );
@@ -124,8 +132,7 @@ function identity_security_kit_enforce_mfa_admin_access() {
 	if ( ! $user_id || ! identity_security_kit_user_requires_mfa( $user_id ) || identity_security_kit_user_has_mfa( $user_id ) ) {
 		return;
 	}
-	$deadline = identity_security_kit_get_mfa_deadline( $user_id );
-	if ( ! $deadline || time() < $deadline ) {
+	if ( ! identity_security_kit_is_mfa_grace_expired( $user_id ) ) {
 		return;
 	}
 

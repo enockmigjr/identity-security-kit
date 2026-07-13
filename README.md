@@ -9,6 +9,11 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Eviter l'enumeration sur les demandes de reset password.
 - Creer et verifier les challenges de verification email.
 - Creer et verifier des OTP email a usage unique avec expiration, verrouillage et anti-rejeu.
+- Normaliser et rendre uniques les numeros internationaux E.164, puis verifier leur possession par OTP SMS.
+- Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
+- Enroler et verifier les facteurs TOTP, email et SMS, avec choix de methode au login.
+- Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
+- Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
@@ -26,6 +31,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `{$wpdb->prefix}identity_security_audit`
 - `{$wpdb->prefix}identity_security_email_challenges`
 - `{$wpdb->prefix}identity_security_email_otp`
+- `{$wpdb->prefix}identity_security_otp_challenges`
 
 ## Options et user meta
 
@@ -34,9 +40,16 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
   - `email_verification_ttl_hours`, `email_verification_resend_minutes`
   - `login_attempts_per_window`, `registration_attempts_per_window`, `password_reset_attempts_per_window`, `email_resend_attempts_per_window`, `rate_limit_window_minutes`
   - `email_otp_ttl_minutes`, `email_otp_length`, `email_otp_max_attempts`, `email_otp_resend_minutes`
+  - `sms_otp_ttl_minutes`, `sms_otp_length`, `sms_otp_max_attempts`, `sms_otp_resend_minutes`, `sms_provider`
+  - `phone_required`, `mfa_enforcement_enabled`, `mfa_grace_days`, `mfa_attempts_per_window`
+  - `mfa_required_capabilities`, `mfa_allowed_methods`
 - `identity_security_kit_version`
 - `identity_email_verified`
 - `identity_email_verification_pending`
+- `identity_phone_e164`, `identity_phone_verified`, `identity_phone_verified_hash`
+- `identity_mfa_totp_secret`, `identity_mfa_totp_last_counter`, `identity_mfa_recovery_codes`
+- `identity_mfa_email_enabled`, `identity_mfa_sms_enabled`, `identity_mfa_preferred_method`
+- `identity_mfa_grace_started_at`, `identity_mfa_login_challenge`
 - `photovault_avatar_id`
 
 ## Actions admin-post
@@ -47,6 +60,16 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `admin_post_identity_security_kit_save_settings`
 - `admin_post_identity_security_kit_email_otp_request`
 - `admin_post_identity_security_kit_email_otp_verify`
+- `admin_post_identity_security_kit_phone_otp_request`
+- `admin_post_identity_security_kit_phone_otp_verify`
+- `admin_post_identity_security_kit_totp_start`
+- `admin_post_identity_security_kit_totp_confirm`
+- `admin_post_identity_security_kit_totp_cancel`
+- `admin_post_identity_security_kit_totp_disable`
+- `admin_post_identity_security_kit_recovery_regenerate`
+- `admin_post_identity_security_kit_channel_mfa_start`
+- `admin_post_identity_security_kit_channel_mfa_confirm`
+- `admin_post_identity_security_kit_mfa_preference`
 
 ## Filtres publics
 
@@ -58,6 +81,14 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_security_kit_avatar_meta_key`
 - `identity_security_kit_email_verified_meta_key`
 - `identity_security_kit_email_pending_meta_key`
+- `identity_security_kit_normalized_phone`
+- `identity_security_kit_phone_meta_key`
+- `identity_security_kit_sms_provider`
+- `identity_security_kit_sms_provider_available`
+- `identity_security_kit_sms_delivery`
+- `identity_security_kit_allowed_mfa_methods`
+- `identity_security_kit_user_requires_mfa`
+- `identity_security_kit_user_has_mfa`
 
 ## OTP email
 
@@ -76,11 +107,24 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 3. Confirmer que le renvoi de verification exige session + nonce.
 4. Confirmer que les reglages restent bornes avec des valeurs POST extremes.
 5. Verifier que l'audit ne stocke pas mot de passe, reset key, token brut ou IP brute.
+6. Executer `php tests/run.php`, `php tests/otp.php` et `php tests/sms-provider.php`.
+7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA et grace 15 jours.
+8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
+9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 
 ## Reste majeur
 
-- OTP SMS/provider abstraction.
-- TOTP/MFA.
-- Recovery codes.
-- Grace period MFA et enforcement wp-admin privilegie.
-- Invalidation de sessions apres evenement sensible.
+- Changement d'email securise avec confirmation de la nouvelle adresse et notification de l'ancienne.
+- Validation des plans de numerotation par une librairie reconnue et UX pays/indicatif.
+- QR Code TOTP accessible.
+- Desactivation et remplacement email/SMS avec re-authentification et facteur existant.
+- Provider SMS reel valide en staging/production; les tests actuels utilisent l'adaptateur generique controle.
+- Rappels de grace MFA, changement de policy/capabilities et cas multisite.
+- Tests navigateur du login natif et matrice d'autorisation wp-admin/AJAX.
+
+## References officielles
+
+- [WordPress Nonces](https://developer.wordpress.org/apis/security/nonces/)
+- [WordPress Password Hashing API](https://developer.wordpress.org/reference/functions/wp_check_password/)
+- [RFC 6238 - TOTP](https://www.rfc-editor.org/rfc/rfc6238)
+- [NIST SP 800-63B - Authentication and Lifecycle Management](https://pages.nist.gov/800-63-4/sp800-63b.html)

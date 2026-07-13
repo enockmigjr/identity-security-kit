@@ -135,6 +135,10 @@ function identity_security_kit_create_email_verification_challenge( $user_id, $e
 	if ( ! $user_id || ! is_email( $email ) ) {
 		return new WP_Error( 'invalid_email_challenge', __( 'Invalid email verification request.', 'identity-security-kit' ) );
 	}
+	$user = get_userdata( $user_id );
+	if ( ! $user || strtolower( $user->user_email ) !== strtolower( $email ) ) {
+		return new WP_Error( 'email_challenge_mismatch', __( 'The email verification request does not match the account.', 'identity-security-kit' ) );
+	}
 
 	$settings   = identity_security_kit_get_settings();
 	$ttl_hours  = max( 1, min( 168, absint( $settings['email_verification_ttl_hours'] ) ) );
@@ -162,27 +166,33 @@ function identity_security_kit_create_email_verification_challenge( $user_id, $e
 		identity_security_kit_log_event( 'email_verification_challenge_failed', 'failure', $user_id, array( 'reason' => 'db_insert_failed' ) );
 		return new WP_Error( 'email_challenge_insert_failed', __( 'Email verification could not be prepared.', 'identity-security-kit' ) );
 	}
+	$challenge_id = absint( $wpdb->insert_id );
 
 	update_user_meta( $user_id, identity_security_kit_email_verified_meta_key(), '0' );
 	update_user_meta( $user_id, identity_security_kit_email_pending_meta_key(), '1' );
 
-	$user       = get_userdata( $user_id );
 	$verify_url = identity_security_kit_get_email_verification_url( $user_id, $token );
 	$subject    = sprintf( __( '[%s] Verify your email address', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
 	$message    = sprintf(
 		/* translators: 1: display name, 2: verification URL, 3: expiration in hours. */
-		__( "Hello %1$s,\n\nPlease verify your email address to secure your account.\n\nOpen this link within %3$d hour(s):\n%2$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
+		__( "Hello %1\$s,\n\nPlease verify your email address to secure your account.\n\nOpen this link within %3\$d hour(s):\n%2\$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
 		$user && $user->display_name ? $user->display_name : __( 'there', 'identity-security-kit' ),
 		$verify_url,
 		$ttl_hours
 	);
 
 	if ( ! wp_mail( $email, $subject, $message ) ) {
+		$wpdb->update(
+			$table,
+			array( 'status' => 'delivery_failed', 'token_hash' => '' ),
+			array( 'id' => $challenge_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
 		identity_security_kit_log_event( 'email_verification_mail_failed', 'warning', $user_id );
 		return new WP_Error( 'email_verification_mail_failed', __( 'Email verification message could not be sent.', 'identity-security-kit' ) );
 	}
 
-	$challenge_id = absint( $wpdb->insert_id );
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$table} SET status = %s WHERE user_id = %d AND email_hash = %s AND status = %s AND id <> %d",
@@ -200,16 +210,19 @@ function identity_security_kit_create_email_verification_challenge( $user_id, $e
 }
 
 /**
- * Handle public email verification links.
+ * Verify and atomically consume an email verification challenge.
+ *
+ * @param int    $user_id User ID.
+ * @param string $token   Raw one-time token.
+ * @return true|WP_Error
  */
-function identity_security_kit_handle_email_verification() {
+function identity_security_kit_verify_email_challenge( $user_id, $token ) {
 	global $wpdb;
 
-	$user_id = isset( $_GET['uid'] ) ? absint( $_GET['uid'] ) : 0;
-	$token   = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
-
+	$user_id = absint( $user_id );
+	$token   = sanitize_text_field( $token );
 	if ( ! $user_id || ! preg_match( '/^[A-Za-z0-9]{20,128}$/', $token ) ) {
-		identity_security_kit_redirect( 'login', array( 'verify' => 'invalid' ) );
+		return new WP_Error( 'email_challenge_invalid', __( 'The email verification request is invalid or expired.', 'identity-security-kit' ) );
 	}
 
 	$table      = identity_security_kit_get_email_verification_table();
@@ -217,7 +230,7 @@ function identity_security_kit_handle_email_verification() {
 	$now        = gmdate( 'Y-m-d H:i:s' );
 	$challenge  = $wpdb->get_row(
 		$wpdb->prepare(
-			"SELECT id, user_id, expires_at FROM {$table} WHERE user_id = %d AND token_hash = %s AND status = %s LIMIT 1",
+			"SELECT id, user_id, email_hash, expires_at FROM {$table} WHERE user_id = %d AND token_hash = %s AND status = %s LIMIT 1",
 			$user_id,
 			$token_hash,
 			'pending'
@@ -226,36 +239,67 @@ function identity_security_kit_handle_email_verification() {
 	);
 
 	if ( ! $challenge ) {
-		identity_security_kit_log_event( 'email_verification_invalid', 'warning', $user_id );
-		identity_security_kit_redirect( 'login', array( 'verify' => 'invalid' ) );
+		return new WP_Error( 'email_challenge_invalid', __( 'The email verification request is invalid or expired.', 'identity-security-kit' ) );
+	}
+
+	$user = get_userdata( $user_id );
+	if ( ! $user || ! hash_equals( $challenge['email_hash'], identity_security_kit_hash_email_challenge_value( $user->user_email ) ) ) {
+		$wpdb->update(
+			$table,
+			array( 'status' => 'superseded', 'token_hash' => '' ),
+			array( 'id' => absint( $challenge['id'] ) ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+		return new WP_Error( 'email_challenge_email_changed', __( 'The account email changed. Request a new verification link.', 'identity-security-kit' ) );
 	}
 
 	if ( $challenge['expires_at'] < $now ) {
 		$wpdb->update(
 			$table,
-			array( 'status' => 'expired' ),
+			array( 'status' => 'expired', 'token_hash' => '' ),
 			array( 'id' => absint( $challenge['id'] ) ),
-			array( '%s' ),
+			array( '%s', '%s' ),
 			array( '%d' )
 		);
-		identity_security_kit_log_event( 'email_verification_expired', 'warning', $user_id );
-		identity_security_kit_redirect( 'login', array( 'verify' => 'expired' ) );
+		return new WP_Error( 'email_challenge_expired', __( 'The email verification request has expired.', 'identity-security-kit' ) );
 	}
 
-	$wpdb->update(
-		$table,
-		array(
-			'status'      => 'verified',
-			'verified_at' => $now,
-		),
-		array( 'id' => absint( $challenge['id'] ) ),
-		array( '%s', '%s' ),
-		array( '%d' )
+	$consumed = $wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$table} SET status = %s, verified_at = %s, token_hash = %s WHERE id = %d AND user_id = %d AND status = %s AND expires_at >= %s",
+			'verified',
+			$now,
+			'',
+			absint( $challenge['id'] ),
+			$user_id,
+			'pending',
+			$now
+		)
 	);
+	if ( 1 !== $consumed ) {
+		return new WP_Error( 'email_challenge_replayed', __( 'The email verification request was already used.', 'identity-security-kit' ) );
+	}
 
 	update_user_meta( $user_id, identity_security_kit_email_verified_meta_key(), '1' );
 	update_user_meta( $user_id, identity_security_kit_email_pending_meta_key(), '0' );
 	identity_security_kit_log_event( 'email_verification_success', 'success', $user_id );
+
+	return true;
+}
+
+/**
+ * Handle public email verification links.
+ */
+function identity_security_kit_handle_email_verification() {
+	$user_id = isset( $_GET['uid'] ) ? absint( $_GET['uid'] ) : 0;
+	$token   = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
+	$result  = identity_security_kit_verify_email_challenge( $user_id, $token );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_log_event( 'email_verification_invalid', 'warning', $user_id );
+		$status = 'email_challenge_expired' === $result->get_error_code() ? 'expired' : 'invalid';
+		identity_security_kit_redirect( 'login', array( 'verify' => $status ) );
+	}
 
 	$target = is_user_logged_in() && (int) get_current_user_id() === (int) $user_id ? 'profile' : 'login';
 	identity_security_kit_redirect( $target, array( 'verify' => 'success' ) );

@@ -243,7 +243,7 @@ function identity_security_kit_handle_forgot_password() {
 			$subject   = sprintf( __( '[%s] Password reset', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
 			$message   = sprintf(
 				/* translators: 1: display name, 2: password reset URL. */
-				__( "Hello %1$s,\n\nA password reset was requested for your account.\n\nOpen this secure link to choose a new password:\n%2$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
+				__( "Hello %1\$s,\n\nA password reset was requested for your account.\n\nOpen this secure link to choose a new password:\n%2\$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
 				$user->display_name ? $user->display_name : $user->user_login,
 				$reset_url
 			);
