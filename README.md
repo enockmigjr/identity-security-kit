@@ -8,6 +8,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Valider les champs critiques cote serveur.
 - Eviter l'enumeration sur les demandes de reset password.
 - Creer et verifier les challenges de verification email.
+- Appliquer les changements d'email uniquement apres mot de passe, confirmation de la nouvelle adresse et notification de l'ancienne.
 - Creer et verifier des OTP email a usage unique avec expiration, verrouillage et anti-rejeu.
 - Normaliser et rendre uniques les numeros internationaux E.164, puis verifier leur possession par OTP SMS.
 - Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
@@ -50,6 +51,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_mfa_totp_secret`, `identity_mfa_totp_last_counter`, `identity_mfa_recovery_codes`
 - `identity_mfa_email_enabled`, `identity_mfa_sms_enabled`, `identity_mfa_preferred_method`
 - `identity_mfa_grace_started_at`, `identity_mfa_login_challenge`
+- `identity_pending_email_change` (adresse proposee chiffree, token hashe et expiration)
 - `photovault_avatar_id`
 
 ## Actions admin-post
@@ -70,6 +72,9 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `admin_post_identity_security_kit_channel_mfa_start`
 - `admin_post_identity_security_kit_channel_mfa_confirm`
 - `admin_post_identity_security_kit_mfa_preference`
+- `admin_post_nopriv_identity_security_kit_confirm_email_change`
+- `admin_post_identity_security_kit_confirm_email_change`
+- `admin_post_identity_security_kit_cancel_email_change`
 
 ## Filtres publics
 
@@ -111,10 +116,10 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA et grace 15 jours.
 8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
+10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
 
 ## Reste majeur
 
-- Changement d'email securise avec confirmation de la nouvelle adresse et notification de l'ancienne.
 - Validation des plans de numerotation par une librairie reconnue et UX pays/indicatif.
 - QR Code TOTP accessible.
 - Desactivation et remplacement email/SMS avec re-authentification et facteur existant.
@@ -126,5 +131,6 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 
 - [WordPress Nonces](https://developer.wordpress.org/apis/security/nonces/)
 - [WordPress Password Hashing API](https://developer.wordpress.org/reference/functions/wp_check_password/)
+- [WordPress send_confirmation_on_profile_email](https://developer.wordpress.org/reference/functions/send_confirmation_on_profile_email/)
 - [RFC 6238 - TOTP](https://www.rfc-editor.org/rfc/rfc6238)
 - [NIST SP 800-63B - Authentication and Lifecycle Management](https://pages.nist.gov/800-63-4/sp800-63b.html)

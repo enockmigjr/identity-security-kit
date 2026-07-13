@@ -386,9 +386,18 @@ function identity_security_kit_handle_profile_update() {
 
 	$current_user_id = get_current_user_id();
 	$current_user    = wp_get_current_user();
-	$email           = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+	$email           = $current_user->user_email;
+	$requested_email_raw = isset( $_POST['new_email'] ) ? trim( (string) wp_unslash( $_POST['new_email'] ) ) : '';
+	$requested_email     = sanitize_email( $requested_email_raw );
+	if ( '' === $requested_email && isset( $_POST['email'] ) ) {
+		$legacy_email = sanitize_email( wp_unslash( $_POST['email'] ) );
+		if ( strtolower( $legacy_email ) !== strtolower( $email ) ) {
+			$requested_email_raw = (string) wp_unslash( $_POST['email'] );
+			$requested_email = $legacy_email;
+		}
+	}
 	$phone           = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
-	$email_changed   = strtolower( $email ) !== strtolower( $current_user->user_email );
+	$email_changed   = '' !== $requested_email && strtolower( $requested_email ) !== strtolower( $email );
 	$bio             = isset( $_POST['bio'] ) ? sanitize_textarea_field( wp_unslash( $_POST['bio'] ) ) : '';
 	$current_phone   = (string) get_user_meta( $current_user_id, identity_security_kit_phone_meta_key(), true );
 	$phone_changed   = '' !== trim( $phone ) && $current_phone !== $phone;
@@ -397,6 +406,9 @@ function identity_security_kit_handle_profile_update() {
 	if ( empty( $email ) || ! is_email( $email ) ) {
 		identity_security_kit_log_event( 'profile_update_rejected', 'warning', $current_user_id, array( 'reason' => 'invalid_email' ) );
 		identity_security_kit_redirect( 'profile', array( 'profile' => 'invalid_email' ) );
+	}
+	if ( '' !== $requested_email_raw && ! is_email( $requested_email ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'email_change_invalid' ) );
 	}
 
 	if ( ! empty( $settings['phone_required'] ) && '' === trim( $phone ) ) {
@@ -412,7 +424,7 @@ function identity_security_kit_handle_profile_update() {
 		$phone_changed     = $current_phone !== $normalized_phone;
 	}
 
-	$email_owner = email_exists( $email );
+	$email_owner = $email_changed ? email_exists( $requested_email ) : false;
 	if ( $email_owner && (int) $email_owner !== (int) $current_user_id ) {
 		identity_security_kit_log_event( 'profile_update_rejected', 'warning', $current_user_id, array( 'reason' => 'email_exists' ) );
 		identity_security_kit_redirect( 'profile', array( 'profile' => 'email_exists' ) );
@@ -420,7 +432,6 @@ function identity_security_kit_handle_profile_update() {
 
 	$user_data = array(
 		'ID'          => $current_user_id,
-		'user_email'  => $email,
 		'description' => $bio,
 	);
 
@@ -487,14 +498,16 @@ function identity_security_kit_handle_profile_update() {
 
 	$redirect_args = array( 'profile' => 'success' );
 
-	if ( $email_changed && function_exists( 'identity_security_kit_create_email_verification_challenge' ) ) {
-		$challenge = identity_security_kit_create_email_verification_challenge( $current_user_id, $email );
-		if ( is_wp_error( $challenge ) ) {
-			identity_security_kit_log_event( 'profile_email_verification_deferred', 'warning', $current_user_id, array( 'reason' => $challenge->get_error_code() ) );
-			$redirect_args['verify'] = 'deferred';
-		} else {
-			$redirect_args['verify'] = 'pending';
+	if ( $email_changed && function_exists( 'identity_security_kit_request_email_change' ) ) {
+		$email_password = isset( $_POST['email_current_password'] ) ? (string) wp_unslash( $_POST['email_current_password'] ) : '';
+		if ( '' === $email_password && isset( $_POST['current_password'] ) ) {
+			$email_password = (string) wp_unslash( $_POST['current_password'] );
 		}
+		$change = identity_security_kit_request_email_change( $current_user_id, $requested_email, $email_password );
+		if ( is_wp_error( $change ) ) {
+			identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $change->get_error_code() ) ) );
+		}
+		$redirect_args['email_change'] = 'pending';
 	}
 
 	if ( isset( $user_data['user_pass'] ) && function_exists( 'identity_security_kit_destroy_other_sessions' ) ) {

@@ -110,10 +110,12 @@ try {
 	$old_token = $matches[1] ?? '';
 	identity_runtime_assert( '' !== $old_token, 'The verification token was not present in the captured message.' );
 
+	remove_action( 'profile_update', 'identity_security_kit_handle_direct_email_change', 20 );
 	wp_update_user( array( 'ID' => $user_id, 'user_email' => 'identity-runtime-changed@photovault.test' ) );
 	$result = identity_security_kit_verify_email_challenge( $user_id, $old_token );
 	identity_runtime_assert( 'email_challenge_email_changed' === identity_runtime_error_code( $result ), 'An old link verified a changed email address.' );
 	wp_update_user( array( 'ID' => $user_id, 'user_email' => $primary_email ) );
+	add_action( 'profile_update', 'identity_security_kit_handle_direct_email_change', 20, 2 );
 
 	$email_messages = array();
 	$result         = identity_security_kit_create_email_verification_challenge( $user_id, $primary_email );
