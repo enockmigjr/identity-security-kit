@@ -29,6 +29,7 @@ function identity_email_change_extract_code( $message ) {
 global $wpdb;
 
 $messages        = array();
+$alt_bodies      = array();
 $user_ids        = array();
 $old_email       = 'identity-email-old@photovault.test';
 $new_email       = 'identity-email-new@photovault.test';
@@ -48,6 +49,10 @@ add_filter(
 		return $attributes;
 	}
 );
+$capture_alt_body = static function ( $phpmailer ) use ( &$alt_bodies ) {
+	$alt_bodies[] = (string) $phpmailer->AltBody;
+};
+add_action( 'phpmailer_init', $capture_alt_body, 20 );
 
 try {
 	delete_transient( $rate_limit_key );
@@ -156,9 +161,24 @@ try {
 
 	update_user_meta( $user_id, 'identity_mfa_email_enabled', '1' );
 	update_user_meta( $user_id, identity_security_kit_email_verified_meta_key(), '1' );
+	$messages   = array();
+	$alt_bodies = array();
 	wp_update_user( array( 'ID' => $user_id, 'user_email' => $direct_email ) );
 	identity_email_change_assert( ! identity_security_kit_is_email_verified( $user_id ), 'A direct external email change remained verified.' );
 	identity_email_change_assert( '' === (string) get_user_meta( $user_id, 'identity_mfa_email_enabled', true ), 'A direct external change kept the old email factor.' );
+	$native_email_notice = end( $messages );
+	identity_email_change_assert( false !== strpos( $native_email_notice['subject'], 'Email Changed' ), 'Native email-change notice was not sent.' );
+	identity_email_change_assert( false !== strpos( $native_email_notice['message'], '<table role="presentation"' ), 'Native email-change notice did not use the professional HTML layout.' );
+	identity_email_change_assert( false !== strpos( (string) $native_email_notice['headers'], 'text/html' ), 'Native email-change notice did not declare HTML content.' );
+	identity_email_change_assert( false !== strpos( (string) end( $alt_bodies ), 'Email address changed' ), 'Native email-change notice did not receive a plain-text AltBody.' );
+
+	$messages   = array();
+	$alt_bodies = array();
+	wp_update_user( array( 'ID' => $user_id, 'user_pass' => 'Runtime-email-changed-84!' ) );
+	$native_password_notice = end( $messages );
+	identity_email_change_assert( false !== strpos( $native_password_notice['subject'], 'Password Changed' ), 'Native password-change notice was not sent.' );
+	identity_email_change_assert( false !== strpos( $native_password_notice['message'], '<table role="presentation"' ), 'Native password-change notice did not use the professional HTML layout.' );
+	identity_email_change_assert( false !== strpos( (string) end( $alt_bodies ), 'Password changed' ), 'Native password-change notice did not receive a plain-text AltBody.' );
 
 	echo wp_json_encode(
 		array(
@@ -168,9 +188,11 @@ try {
 			'confirmation'              => 'single_use_and_expiring',
 			'old_email_proofs'          => 'revoked',
 			'direct_change'             => 'marked_unverified',
+			'native_notices'            => 'professional_multipart',
 		)
 	);
 } finally {
+	remove_action( 'phpmailer_init', $capture_alt_body, 20 );
 	delete_transient( $rate_limit_key );
 	require_once ABSPATH . 'wp-admin/includes/user.php';
 	foreach ( array_unique( array_filter( array_map( 'absint', $user_ids ) ) ) as $cleanup_user_id ) {

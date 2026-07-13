@@ -124,3 +124,51 @@ function identity_security_kit_send_transactional_email( $to, $subject, $content
 		remove_action( 'phpmailer_init', $set_alt_body );
 	}
 }
+
+/** Apply an AltBody to the next WordPress email only. */
+function identity_security_kit_register_next_email_alt_body( $alt_body ) {
+	$alt_body = trim( (string) $alt_body );
+	$callback = null;
+	$callback = static function ( $phpmailer ) use ( $alt_body, &$callback ) {
+		$phpmailer->AltBody = $alt_body;
+		remove_action( 'phpmailer_init', $callback );
+	};
+	add_action( 'phpmailer_init', $callback );
+}
+
+/** Render the native WordPress email-change notice with the Identity layout. */
+function identity_security_kit_filter_email_change_email( $email, $user, $userdata ) {
+	$name      = identity_security_kit_sanitize_email_text( $user['display_name'] ?? $user['user_login'] ?? __( 'there', 'identity-security-kit' ), 190 );
+	$new_email = sanitize_email( $userdata['user_email'] ?? '' );
+	$content   = array(
+		'preheader' => __( 'The email address on your account was changed.', 'identity-security-kit' ),
+		'title'     => __( 'Email address changed', 'identity-security-kit' ),
+		'greeting'  => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+		'intro'     => sprintf( __( 'This notice confirms that the email address on your account was changed to %s.', 'identity-security-kit' ), $new_email ),
+		'notice'    => sprintf( __( 'If you did not make this change, reset your password and contact the site administrator at %s.', 'identity-security-kit' ), sanitize_email( get_option( 'admin_email' ) ) ),
+	);
+	$email['message'] = identity_security_kit_render_email_html( $content );
+	$email['headers'] = 'Content-Type: text/html; charset=UTF-8';
+	identity_security_kit_register_next_email_alt_body( identity_security_kit_render_email_text( $content ) );
+
+	return $email;
+}
+add_filter( 'email_change_email', 'identity_security_kit_filter_email_change_email', 10, 3 );
+
+/** Render the native WordPress password-change notice with the Identity layout. */
+function identity_security_kit_filter_password_change_email( $email, $user, $userdata ) {
+	$name    = identity_security_kit_sanitize_email_text( $user['display_name'] ?? $user['user_login'] ?? __( 'there', 'identity-security-kit' ), 190 );
+	$content = array(
+		'preheader' => __( 'The password on your account was changed.', 'identity-security-kit' ),
+		'title'     => __( 'Password changed', 'identity-security-kit' ),
+		'greeting'  => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+		'intro'     => __( 'This notice confirms that the password on your account was changed.', 'identity-security-kit' ),
+		'notice'    => sprintf( __( 'If you did not make this change, contact the site administrator immediately at %s.', 'identity-security-kit' ), sanitize_email( get_option( 'admin_email' ) ) ),
+	);
+	$email['message'] = identity_security_kit_render_email_html( $content );
+	$email['headers'] = 'Content-Type: text/html; charset=UTF-8';
+	identity_security_kit_register_next_email_alt_body( identity_security_kit_render_email_text( $content ) );
+
+	return $email;
+}
+add_filter( 'password_change_email', 'identity_security_kit_filter_password_change_email', 10, 3 );
