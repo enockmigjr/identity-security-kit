@@ -8,6 +8,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Valider les champs critiques cote serveur.
 - Eviter l'enumeration sur les demandes de reset password.
 - Creer et verifier les challenges de verification email.
+- Creer et verifier des OTP email a usage unique avec expiration, verrouillage et anti-rejeu.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
@@ -24,6 +25,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 
 - `{$wpdb->prefix}identity_security_audit`
 - `{$wpdb->prefix}identity_security_email_challenges`
+- `{$wpdb->prefix}identity_security_email_otp`
 
 ## Options et user meta
 
@@ -31,6 +33,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
   - `min_password_length`, `max_avatar_size_mb`, `max_avatar_dimension`
   - `email_verification_ttl_hours`, `email_verification_resend_minutes`
   - `login_attempts_per_window`, `registration_attempts_per_window`, `password_reset_attempts_per_window`, `email_resend_attempts_per_window`, `rate_limit_window_minutes`
+  - `email_otp_ttl_minutes`, `email_otp_length`, `email_otp_max_attempts`, `email_otp_resend_minutes`
 - `identity_security_kit_version`
 - `identity_email_verified`
 - `identity_email_verification_pending`
@@ -42,6 +45,8 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `admin_post_identity_security_kit_verify_email`
 - `admin_post_identity_security_kit_resend_email_verification`
 - `admin_post_identity_security_kit_save_settings`
+- `admin_post_identity_security_kit_email_otp_request`
+- `admin_post_identity_security_kit_email_otp_verify`
 
 ## Filtres publics
 
@@ -54,6 +59,16 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_security_kit_email_verified_meta_key`
 - `identity_security_kit_email_pending_meta_key`
 
+## OTP email
+
+Le shortcode identity_security_email_otp rend un flux authentifie de demande et verification. Son attribut purpose isole les usages.
+
+Les fonctions identity_security_kit_create_email_otp_challenge() et identity_security_kit_verify_email_otp_challenge() permettent une integration applicative. Les actions identity_security_kit_email_otp_created et identity_security_kit_email_otp_verified notifient les integrations sans exposer le code brut.
+
+Conception securite: random_int, wp_hash_password, wp_check_password, expiration courte, essais bornes, cooldown, nonce lie au purpose, consommation atomique et effacement du hash.
+
+References: WordPress Nonces API https://developer.wordpress.org/apis/security/nonces/ ; wp_check_password https://developer.wordpress.org/reference/functions/wp_check_password/ ; NIST SP 800-63B https://pages.nist.gov/800-63-4/sp800-63b.html.
+
 ## Verification minimale
 
 1. Activer le plugin et verifier les tables DB.
@@ -64,7 +79,6 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 
 ## Reste majeur
 
-- OTP email avec expiration, tentatives et anti-replay.
 - OTP SMS/provider abstraction.
 - TOTP/MFA.
 - Recovery codes.

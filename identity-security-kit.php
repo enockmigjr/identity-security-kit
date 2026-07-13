@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.1.6
+ * Version: 0.2.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.1.6' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.2.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -44,6 +44,10 @@ function identity_security_kit_get_default_settings() {
 		'password_reset_attempts_per_window' => 6,
 		'email_resend_attempts_per_window'   => 6,
 		'rate_limit_window_minutes'          => 15,
+		'email_otp_ttl_minutes'               => 10,
+		'email_otp_length'                    => 6,
+		'email_otp_max_attempts'              => 5,
+		'email_otp_resend_minutes'            => 2,
 	);
 }
 
@@ -67,6 +71,10 @@ function identity_security_kit_get_settings() {
 	$settings['password_reset_attempts_per_window'] = max( 1, min( 30, absint( $settings['password_reset_attempts_per_window'] ) ) );
 	$settings['email_resend_attempts_per_window']   = max( 1, min( 30, absint( $settings['email_resend_attempts_per_window'] ) ) );
 	$settings['rate_limit_window_minutes']          = max( 1, min( 1440, absint( $settings['rate_limit_window_minutes'] ) ) );
+	$settings['email_otp_ttl_minutes']               = max( 2, min( 30, absint( $settings['email_otp_ttl_minutes'] ) ) );
+	$settings['email_otp_length']                    = max( 6, min( 8, absint( $settings['email_otp_length'] ) ) );
+	$settings['email_otp_max_attempts']              = max( 3, min( 10, absint( $settings['email_otp_max_attempts'] ) ) );
+	$settings['email_otp_resend_minutes']            = max( 1, min( 30, absint( $settings['email_otp_resend_minutes'] ) ) );
 
 	return $settings;
 }
@@ -151,6 +159,17 @@ function identity_security_kit_get_email_verification_table() {
 }
 
 /**
+ * Return the email OTP challenge table name.
+ *
+ * @return string
+ */
+function identity_security_kit_get_email_otp_table() {
+	global $wpdb;
+
+	return $wpdb->prefix . 'identity_security_email_otp';
+}
+
+/**
  * Install or upgrade audit storage.
  */
 function identity_security_kit_install_schema() {
@@ -197,6 +216,28 @@ function identity_security_kit_install_schema() {
 	) {$charset_collate};";
 
 	dbDelta( $verification_sql );
+
+	$otp_table = identity_security_kit_get_email_otp_table();
+	$otp_sql   = "CREATE TABLE {$otp_table} (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		user_id bigint(20) unsigned NOT NULL,
+		purpose varchar(64) NOT NULL,
+		destination_hash char(64) NOT NULL,
+		code_hash varchar(255) NOT NULL,
+		status varchar(24) NOT NULL DEFAULT 'pending',
+		attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+		max_attempts smallint(5) unsigned NOT NULL,
+		expires_at datetime NOT NULL,
+		created_at datetime NOT NULL,
+		consumed_at datetime NULL,
+		PRIMARY KEY  (id),
+		KEY user_purpose (user_id, purpose),
+		KEY destination_hash (destination_hash),
+		KEY status (status),
+		KEY expires_at (expires_at)
+	) {$charset_collate};";
+
+	dbDelta( $otp_sql );
 }
 
 /**
@@ -234,5 +275,6 @@ add_action( 'admin_init', 'identity_security_kit_maybe_upgrade' );
 
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/audit.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-verification.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-otp.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/auth-handlers.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/admin.php';

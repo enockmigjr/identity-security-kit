@@ -169,6 +169,22 @@ function identity_security_kit_render_admin_page() {
 							</td>
 						</tr>
 						<tr>
+							<th scope="row"><label for="isk_email_otp_ttl_minutes"><?php esc_html_e( 'Email OTP expiry', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_email_otp_ttl_minutes" class="small-text" name="email_otp_ttl_minutes" type="number" min="2" max="30" value="<?php echo esc_attr( $settings['email_otp_ttl_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_email_otp_length"><?php esc_html_e( 'Email OTP length', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_email_otp_length" class="small-text" name="email_otp_length" type="number" min="6" max="8" value="<?php echo esc_attr( $settings['email_otp_length'] ); ?>"> <?php esc_html_e( 'digits', 'identity-security-kit' ); ?></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_email_otp_max_attempts"><?php esc_html_e( 'Email OTP attempts', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_email_otp_max_attempts" class="small-text" name="email_otp_max_attempts" type="number" min="3" max="10" value="<?php echo esc_attr( $settings['email_otp_max_attempts'] ); ?>"></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="isk_email_otp_resend_minutes"><?php esc_html_e( 'Email OTP resend cooldown', 'identity-security-kit' ); ?></label></th>
+							<td><input id="isk_email_otp_resend_minutes" class="small-text" name="email_otp_resend_minutes" type="number" min="1" max="30" value="<?php echo esc_attr( $settings['email_otp_resend_minutes'] ); ?>"> <?php esc_html_e( 'minutes', 'identity-security-kit' ); ?></td>
+						</tr>
+						<tr>
 							<th scope="row"><label for="isk_login_attempts_per_window"><?php esc_html_e( 'Login attempts', 'identity-security-kit' ); ?></label></th>
 							<td>
 								<input id="isk_login_attempts_per_window" class="small-text" name="login_attempts_per_window" type="number" min="3" max="60" value="<?php echo esc_attr( $settings['login_attempts_per_window'] ); ?>">
@@ -218,6 +234,7 @@ function identity_security_kit_render_admin_page() {
 				<h2><?php esc_html_e( 'Security modules', 'identity-security-kit' ); ?></h2>
 				<ul class="isk-list">
 					<li><?php esc_html_e( 'Email verification challenges with hashed one-time tokens', 'identity-security-kit' ); ?></li>
+					<li><?php esc_html_e( 'Email OTP challenges with bounded expiry, attempts and one-time consumption', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Profile upload validation and bounded image dimensions', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Password reset flow without account enumeration', 'identity-security-kit' ); ?></li>
 					<li><?php esc_html_e( 'Security audit events without raw secrets or tokens', 'identity-security-kit' ); ?></li>
@@ -288,6 +305,10 @@ function identity_security_kit_handle_save_settings() {
 		'password_reset_attempts_per_window' => isset( $_POST['password_reset_attempts_per_window'] ) ? max( 1, min( 30, absint( $_POST['password_reset_attempts_per_window'] ) ) ) : 6,
 		'email_resend_attempts_per_window'   => isset( $_POST['email_resend_attempts_per_window'] ) ? max( 1, min( 30, absint( $_POST['email_resend_attempts_per_window'] ) ) ) : 6,
 		'rate_limit_window_minutes'          => isset( $_POST['rate_limit_window_minutes'] ) ? max( 1, min( 1440, absint( $_POST['rate_limit_window_minutes'] ) ) ) : 15,
+		'email_otp_ttl_minutes'               => isset( $_POST['email_otp_ttl_minutes'] ) ? max( 2, min( 30, absint( $_POST['email_otp_ttl_minutes'] ) ) ) : 10,
+		'email_otp_length'                    => isset( $_POST['email_otp_length'] ) ? max( 6, min( 8, absint( $_POST['email_otp_length'] ) ) ) : 6,
+		'email_otp_max_attempts'              => isset( $_POST['email_otp_max_attempts'] ) ? max( 3, min( 10, absint( $_POST['email_otp_max_attempts'] ) ) ) : 5,
+		'email_otp_resend_minutes'            => isset( $_POST['email_otp_resend_minutes'] ) ? max( 1, min( 30, absint( $_POST['email_otp_resend_minutes'] ) ) ) : 2,
 	);
 
 	update_option( 'identity_security_kit_settings', $settings, false );
