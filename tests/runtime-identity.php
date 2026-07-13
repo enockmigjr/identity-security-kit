@@ -19,6 +19,16 @@ function identity_runtime_error_code( $value ) {
 	return is_wp_error( $value ) ? $value->get_error_code() : '';
 }
 
+function identity_runtime_email_text( $message ) {
+	return html_entity_decode( wp_strip_all_tags( (string) $message ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+}
+
+function identity_runtime_extract_email_code( $message ) {
+	preg_match( '/code is:\s*([0-9]{6,8})/i', identity_runtime_email_text( $message ), $matches );
+
+	return $matches[1] ?? '';
+}
+
 global $wpdb;
 
 $email_messages = array();
@@ -106,7 +116,7 @@ try {
 	identity_runtime_assert( 'email_challenge_mismatch' === identity_runtime_error_code( $result ), 'A challenge was created for an email not owned by the account.' );
 	$result = identity_security_kit_create_email_verification_challenge( $user_id, $primary_email );
 	identity_runtime_assert( true === $result && 1 === count( $email_messages ), 'Email verification challenge was not delivered.' );
-	preg_match( '/[?&]token=([A-Za-z0-9]+)/', $email_messages[0]['message'], $matches );
+	preg_match( '/[?&]token=([A-Za-z0-9]+)/', html_entity_decode( $email_messages[0]['message'] ), $matches );
 	$old_token = $matches[1] ?? '';
 	identity_runtime_assert( '' !== $old_token, 'The verification token was not present in the captured message.' );
 
@@ -120,7 +130,7 @@ try {
 	$email_messages = array();
 	$result         = identity_security_kit_create_email_verification_challenge( $user_id, $primary_email );
 	identity_runtime_assert( true === $result, 'Replacement email verification challenge failed.' );
-	preg_match( '/[?&]token=([A-Za-z0-9]+)/', $email_messages[0]['message'], $matches );
+	preg_match( '/[?&]token=([A-Za-z0-9]+)/', html_entity_decode( $email_messages[0]['message'] ), $matches );
 	$token  = $matches[1] ?? '';
 	$result = identity_security_kit_verify_email_challenge( $user_id, $token );
 	identity_runtime_assert( true === $result && identity_security_kit_is_email_verified( $user_id ), 'The current email could not be verified.' );
@@ -143,8 +153,7 @@ try {
 	$email_messages = array();
 	$email_challenge = identity_security_kit_create_email_otp_challenge( $user_id, 'runtime_email' );
 	identity_runtime_assert( ! is_wp_error( $email_challenge ), 'Email OTP creation failed.' );
-	preg_match( '/code is: ([0-9]{6,8})/', $email_messages[0]['message'], $matches );
-	$email_code = $matches[1] ?? '';
+	$email_code = identity_runtime_extract_email_code( $email_messages[0]['message'] );
 	identity_runtime_assert( 'otp_invalid' === identity_runtime_error_code( identity_security_kit_verify_email_otp_challenge( $email_challenge, $user_id, $email_code, 'wrong_purpose' ) ), 'OTP purpose isolation failed.' );
 	identity_runtime_assert( 'otp_incorrect' === identity_runtime_error_code( identity_security_kit_verify_email_otp_challenge( $email_challenge, $user_id, '000000', 'runtime_email' ) ), 'Incorrect OTP was not rejected.' );
 	identity_runtime_assert( true === identity_security_kit_verify_email_otp_challenge( $email_challenge, $user_id, $email_code, 'runtime_email' ), 'Correct email OTP was not consumed.' );
@@ -152,9 +161,9 @@ try {
 
 	$email_messages  = array();
 	$expired_id      = identity_security_kit_create_email_otp_challenge( $user_id, 'runtime_expired' );
-	preg_match( '/code is: ([0-9]{6,8})/', $email_messages[0]['message'], $matches );
+	$expired_code    = identity_runtime_extract_email_code( $email_messages[0]['message'] );
 	$wpdb->update( $otp_table, array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ), array( 'id' => $expired_id ), array( '%s' ), array( '%d' ) );
-	identity_runtime_assert( 'otp_expired' === identity_runtime_error_code( identity_security_kit_verify_email_otp_challenge( $expired_id, $user_id, $matches[1] ?? '', 'runtime_expired' ) ), 'Expired OTP was accepted.' );
+	identity_runtime_assert( 'otp_expired' === identity_runtime_error_code( identity_security_kit_verify_email_otp_challenge( $expired_id, $user_id, $expired_code, 'runtime_expired' ) ), 'Expired OTP was accepted.' );
 
 	$email_messages = array();
 	$locked_id      = identity_security_kit_create_email_otp_challenge( $user_id, 'runtime_locked' );
@@ -174,8 +183,8 @@ try {
 
 	$email_messages  = array();
 	$enrollment_id   = identity_security_kit_create_email_otp_challenge( $user_id, 'mfa_enrollment_email' );
-	preg_match( '/code is: ([0-9]{6,8})/', $email_messages[0]['message'], $matches );
-	$enabled = identity_security_kit_enable_channel_mfa( $user_id, 'email', $enrollment_id, $matches[1] ?? '' );
+	$enrollment_code = identity_runtime_extract_email_code( $email_messages[0]['message'] );
+	$enabled = identity_security_kit_enable_channel_mfa( $user_id, 'email', $enrollment_id, $enrollment_code );
 	identity_runtime_assert( ! is_wp_error( $enabled ) && identity_security_kit_is_mfa_method_enabled( $user_id, 'email' ), 'Email MFA enrollment failed.' );
 
 	$sms_messages     = array();
@@ -200,10 +209,10 @@ try {
 	parse_str( (string) wp_parse_url( $login_url, PHP_URL_QUERY ), $login_query );
 	$login_token = $login_query['token'] ?? '';
 	$prepared    = identity_security_kit_prepare_login_method( $login_token, 'email' );
-	preg_match( '/code is: ([0-9]{6,8})/', end( $email_messages )['message'], $matches );
-	$consumed = identity_security_kit_consume_login_challenge( $login_token, $matches[1] ?? '', 'email' );
+	$login_code  = identity_runtime_extract_email_code( end( $email_messages )['message'] );
+	$consumed = identity_security_kit_consume_login_challenge( $login_token, $login_code, 'email' );
 	identity_runtime_assert( ! is_wp_error( $prepared ) && ! is_wp_error( $consumed ), 'Email MFA login challenge failed.' );
-	identity_runtime_assert( 'mfa_challenge_invalid' === identity_runtime_error_code( identity_security_kit_consume_login_challenge( $login_token, $matches[1] ?? '', 'email' ) ), 'MFA browser challenge replay was accepted.' );
+	identity_runtime_assert( 'mfa_challenge_invalid' === identity_runtime_error_code( identity_security_kit_consume_login_challenge( $login_token, $login_code, 'email' ) ), 'MFA browser challenge replay was accepted.' );
 
 	update_user_meta( $user_id, 'identity_mfa_preferred_method', 'sms' );
 	$sms_messages = array();
@@ -226,8 +235,8 @@ try {
 	$email_messages = array();
 	$disable_id     = identity_security_kit_start_channel_mfa_disable( $user_id, 'email' );
 	identity_runtime_assert( ! is_wp_error( $disable_id ) && 1 === count( $email_messages ), 'Email MFA removal challenge was not delivered.' );
-	preg_match( '/code is: ([0-9]{6,8})/', $email_messages[0]['message'], $matches );
-	$result = identity_security_kit_confirm_channel_mfa_disable( $user_id, 'email', $disable_id, $matches[1] ?? '' );
+	$disable_code = identity_runtime_extract_email_code( $email_messages[0]['message'] );
+	$result = identity_security_kit_confirm_channel_mfa_disable( $user_id, 'email', $disable_id, $disable_code );
 	identity_runtime_assert( true === $result && ! identity_security_kit_is_mfa_method_enabled( $user_id, 'email' ), 'Email MFA factor was not removed after its OTP proof.' );
 
 	$sms_messages = array();

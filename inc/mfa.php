@@ -395,10 +395,16 @@ function identity_security_kit_destroy_other_sessions( $user_id ) {
 function identity_security_kit_send_security_notification( $user_id, $message ) {
 	$user = get_userdata( absint( $user_id ) );
 	if ( $user && is_email( $user->user_email ) ) {
-		wp_mail(
+		identity_security_kit_send_transactional_email(
 			$user->user_email,
 			sprintf( __( '[%s] Security change', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) ),
-			$message . "\n\n" . __( 'If you did not make this change, reset your password and contact the site administrator.', 'identity-security-kit' )
+			array(
+				'preheader' => __( 'A security setting changed on your account.', 'identity-security-kit' ),
+				'title'     => __( 'Security change', 'identity-security-kit' ),
+				'greeting'  => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $user->display_name ? $user->display_name : $user->user_login ),
+				'intro'     => $message,
+				'notice'    => __( 'If you did not make this change, reset your password and contact the site administrator.', 'identity-security-kit' ),
+			)
 		);
 	}
 }

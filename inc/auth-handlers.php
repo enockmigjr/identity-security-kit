@@ -241,14 +241,20 @@ function identity_security_kit_handle_forgot_password() {
 				'login'
 			);
 			$subject   = sprintf( __( '[%s] Password reset', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
-			$message   = sprintf(
-				/* translators: 1: display name, 2: password reset URL. */
-				__( "Hello %1\$s,\n\nA password reset was requested for your account.\n\nOpen this secure link to choose a new password:\n%2\$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
-				$user->display_name ? $user->display_name : $user->user_login,
-				$reset_url
-			);
-
-			if ( ! wp_mail( $user->user_email, $subject, $message ) ) {
+			$name = $user->display_name ? $user->display_name : $user->user_login;
+			if ( ! identity_security_kit_send_transactional_email(
+				$user->user_email,
+				$subject,
+				array(
+					'preheader'    => __( 'A secure password reset link was requested.', 'identity-security-kit' ),
+					'title'        => __( 'Reset your password', 'identity-security-kit' ),
+					'greeting'     => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+					'intro'        => __( 'A password reset was requested for your account.', 'identity-security-kit' ),
+					'action_url'   => $reset_url,
+					'action_label' => __( 'Choose a new password', 'identity-security-kit' ),
+					'notice'       => __( 'If you did not request this, ignore this email. Your password has not changed.', 'identity-security-kit' ),
+				)
+			) ) {
 				do_action( 'identity_security_kit_password_reset_mail_failed', $user->ID );
 			}
 		}

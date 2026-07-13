@@ -19,6 +19,13 @@ function identity_email_change_code( $value ) {
 	return is_wp_error( $value ) ? $value->get_error_code() : '';
 }
 
+function identity_email_change_extract_code( $message ) {
+	$text = html_entity_decode( wp_strip_all_tags( (string) $message ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	preg_match( '/code is:\s*([0-9]{6,8})/i', $text, $matches );
+
+	return $matches[1] ?? '';
+}
+
 global $wpdb;
 
 $messages        = array();
@@ -104,7 +111,7 @@ try {
 		}
 	}
 	identity_email_change_assert( is_array( $confirmation ), 'Confirmation was not sent to the new email.' );
-	preg_match( '/[?&]token=([A-Za-z0-9_-]+)/', $confirmation['message'], $matches );
+	preg_match( '/[?&]token=([A-Za-z0-9_-]+)/', html_entity_decode( $confirmation['message'] ), $matches );
 	$token = $matches[1] ?? '';
 	identity_email_change_assert( strlen( $token ) >= 40, 'Confirmation capability token is missing.' );
 	identity_email_change_assert( 'email_change_invalid' === identity_email_change_code( identity_security_kit_confirm_email_change( $user_id, str_repeat( 'a', 43 ) ) ), 'An incorrect token was accepted.' );
@@ -123,7 +130,7 @@ try {
 			break;
 		}
 	}
-	preg_match( '/[?&]token=([A-Za-z0-9_-]+)/', $confirmation['message'], $matches );
+	preg_match( '/[?&]token=([A-Za-z0-9_-]+)/', html_entity_decode( $confirmation['message'] ), $matches );
 	$token = $matches[1] ?? '';
 
 	$messages     = array();
@@ -131,8 +138,7 @@ try {
 	$old_otp_code = '';
 	foreach ( $messages as $message ) {
 		if ( false !== strpos( $message['subject'], 'Your security code' ) ) {
-			preg_match( '/code is: ([0-9]{6,8})/', $message['message'], $matches );
-			$old_otp_code = $matches[1] ?? '';
+			$old_otp_code = identity_email_change_extract_code( $message['message'] );
 		}
 	}
 	identity_email_change_assert( ! is_wp_error( $otp_id ) && '' !== $old_otp_code, 'Old-address OTP setup failed.' );

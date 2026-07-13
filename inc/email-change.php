@@ -154,22 +154,37 @@ function identity_security_kit_request_email_change( $user_id, $new_email, $curr
 
 	$site_name = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
 	$subject   = sprintf( __( '[%s] Confirm your new email address', 'identity-security-kit' ), $site_name );
-	$message   = sprintf(
-		__( "Hello %1\$s,\n\nConfirm this new email address for your account by opening the link below:\n%2\$s\n\nThis link expires in %3\$d hour(s). If you did not request this change, ignore this message.", 'identity-security-kit' ),
-		$user->display_name ? $user->display_name : $user->user_login,
-		identity_security_kit_get_email_change_url( $user_id, $token ),
-		(int) ( $ttl / HOUR_IN_SECONDS )
-	);
-	if ( ! wp_mail( $new_email, $subject, $message ) ) {
+	$name       = $user->display_name ? $user->display_name : $user->user_login;
+	$change_url = identity_security_kit_get_email_change_url( $user_id, $token );
+	if ( ! identity_security_kit_send_transactional_email(
+		$new_email,
+		$subject,
+		array(
+			'preheader'    => __( 'Confirm this address before it is attached to your account.', 'identity-security-kit' ),
+			'title'        => __( 'Confirm your new email address', 'identity-security-kit' ),
+			'greeting'     => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+			'intro'        => __( 'Confirm this new email address for your account.', 'identity-security-kit' ),
+			'details'      => array( sprintf( __( 'This secure link expires in %d hour(s).', 'identity-security-kit' ), (int) ( $ttl / HOUR_IN_SECONDS ) ) ),
+			'action_url'   => $change_url,
+			'action_label' => __( 'Confirm new email address', 'identity-security-kit' ),
+			'notice'       => __( 'If you did not request this change, ignore this message.', 'identity-security-kit' ),
+		)
+	) ) {
 		delete_user_meta( $user_id, identity_security_kit_pending_email_change_meta_key(), $pending );
 		identity_security_kit_log_event( 'email_change_delivery_failed', 'failure', $user_id );
 		return new WP_Error( 'email_change_delivery_failed', __( 'The confirmation email could not be sent.', 'identity-security-kit' ) );
 	}
 
-	wp_mail(
+	identity_security_kit_send_transactional_email(
 		$user->user_email,
 		sprintf( __( '[%s] Email change requested', 'identity-security-kit' ), $site_name ),
-		__( "A request was made to change the email address on your account. Your current address remains active until the new one is confirmed.\n\nIf you did not request this, change your password and contact the site administrator.", 'identity-security-kit' )
+		array(
+			'preheader' => __( 'A new email address is awaiting confirmation.', 'identity-security-kit' ),
+			'title'     => __( 'Email change requested', 'identity-security-kit' ),
+			'greeting'  => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+			'intro'     => __( 'A request was made to change the email address on your account. Your current address remains active until the new one is confirmed.', 'identity-security-kit' ),
+			'notice'    => __( 'If you did not request this, change your password and contact the site administrator.', 'identity-security-kit' ),
+		)
 	);
 	identity_security_kit_log_event( 'email_change_requested', 'info', $user_id, array( 'expires_hours' => (int) ( $ttl / HOUR_IN_SECONDS ) ) );
 

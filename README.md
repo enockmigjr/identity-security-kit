@@ -17,6 +17,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
 - Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
 - Envoyer des rappels MFA J+1, J+7 et J+12 par cron borne et idempotent, puis reconciler les changements de roles et de politique.
+- Rendre les emails de verification, reset, OTP, changement d'adresse, MFA et rappels en HTML responsive avec alternative texte multipart.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
@@ -96,6 +97,7 @@ Les capabilities sont ajoutees aux administrateurs a l'activation/upgrade.
 - `identity_security_kit_sms_provider`
 - `identity_security_kit_sms_provider_available`
 - `identity_security_kit_sms_delivery`
+- `identity_security_kit_email_brand`
 - `identity_security_kit_allowed_mfa_methods`
 - `identity_security_kit_user_requires_mfa`
 - `identity_security_kit_user_has_mfa`
@@ -128,6 +130,7 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
+11. Executer `wp eval-file tests/runtime-email-templates.php` pour verifier layout responsive, sanitization, OTP, CTA, `AltBody` PHPMailer et remise SMTP.
 
 ## Reste majeur
 

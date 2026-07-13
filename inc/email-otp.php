@@ -13,15 +13,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 function identity_security_kit_deliver_email_otp( $email, $code, $context ) {
 	$user    = get_userdata( absint( $context['user_id'] ?? 0 ) );
 	$subject = sprintf( __( '[%s] Your security code', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
-	$message = sprintf(
-		/* translators: 1: display name, 2: OTP code, 3: expiration in minutes. */
-		__( "Hello %1\$s,\n\nYour one-time security code is: %2\$s\n\nIt expires in %3\$d minutes and can only be used once. Never share this code.\n\nIf you did not request it, you can ignore this email.", 'identity-security-kit' ),
-		$user && $user->display_name ? $user->display_name : __( 'there', 'identity-security-kit' ),
-		$code,
-		absint( $context['ttl_minutes'] ?? 10 )
+	$name = $user && $user->display_name ? $user->display_name : __( 'there', 'identity-security-kit' );
+	$sent = identity_security_kit_send_transactional_email(
+		$email,
+		$subject,
+		array(
+			'preheader' => __( 'Your one-time security code is ready.', 'identity-security-kit' ),
+			'title'     => __( 'Your security code', 'identity-security-kit' ),
+			'greeting'  => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+			'intro'     => __( 'Use this code to complete the security check.', 'identity-security-kit' ),
+			'code'      => $code,
+			'details'   => array( sprintf( __( 'It expires in %d minutes and can only be used once. Never share this code.', 'identity-security-kit' ), absint( $context['ttl_minutes'] ?? 10 ) ) ),
+			'notice'    => __( 'If you did not request this code, ignore this email.', 'identity-security-kit' ),
+		)
 	);
 
-	return wp_mail( $email, $subject, $message ) ? true : new WP_Error( 'otp_delivery_failed', __( 'The verification code could not be sent.', 'identity-security-kit' ) );
+	return $sent ? true : new WP_Error( 'otp_delivery_failed', __( 'The verification code could not be sent.', 'identity-security-kit' ) );
 }
 
 /** Create an email OTP bound to the account's current address. */

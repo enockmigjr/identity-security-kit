@@ -135,12 +135,18 @@ function identity_security_kit_maybe_send_mfa_grace_reminder( $user_id, $now = 0
 	set_transient( $lock_key, 1, 5 * MINUTE_IN_SECONDS );
 	$deadline  = $started + ( $grace_days * DAY_IN_SECONDS );
 	$remaining = max( 0, (int) ceil( ( $deadline - $now ) / DAY_IN_SECONDS ) );
-	$sent_ok   = wp_mail(
+	$sent_ok   = identity_security_kit_send_transactional_email(
 		$user->user_email,
 		sprintf( __( '[%s] Two-factor authentication required', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) ),
-		sprintf( __( 'Your account requires two-factor authentication. %d day(s) remain before privileged access is restricted.', 'identity-security-kit' ), $remaining )
-			. "\n\n"
-			. sprintf( __( 'Configure a verification method: %s', 'identity-security-kit' ), admin_url( 'profile.php#identity-security-mfa' ) )
+		array(
+			'preheader'    => sprintf( __( '%d day(s) remain to configure two-factor authentication.', 'identity-security-kit' ), $remaining ),
+			'title'        => __( 'Two-factor authentication required', 'identity-security-kit' ),
+			'greeting'     => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $user->display_name ? $user->display_name : $user->user_login ),
+			'intro'        => sprintf( __( 'Your account requires two-factor authentication. %d day(s) remain before privileged access is restricted.', 'identity-security-kit' ), $remaining ),
+			'action_url'   => admin_url( 'profile.php#identity-security-mfa' ),
+			'action_label' => __( 'Configure two-factor authentication', 'identity-security-kit' ),
+			'notice'       => __( 'This requirement protects privileged access to the site.', 'identity-security-kit' ),
+		)
 	);
 	delete_transient( $lock_key );
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.8.0
+ * Version: 0.9.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.8.0' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.9.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 
 /**
@@ -337,6 +337,7 @@ function identity_security_kit_maybe_upgrade() {
 add_action( 'admin_init', 'identity_security_kit_maybe_upgrade' );
 
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/audit.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-templates.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-verification.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/otp.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/email-otp.php';

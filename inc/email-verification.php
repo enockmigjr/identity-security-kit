@@ -173,15 +173,21 @@ function identity_security_kit_create_email_verification_challenge( $user_id, $e
 
 	$verify_url = identity_security_kit_get_email_verification_url( $user_id, $token );
 	$subject    = sprintf( __( '[%s] Verify your email address', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
-	$message    = sprintf(
-		/* translators: 1: display name, 2: verification URL, 3: expiration in hours. */
-		__( "Hello %1\$s,\n\nPlease verify your email address to secure your account.\n\nOpen this link within %3\$d hour(s):\n%2\$s\n\nIf you did not request this, you can ignore this email.", 'identity-security-kit' ),
-		$user && $user->display_name ? $user->display_name : __( 'there', 'identity-security-kit' ),
-		$verify_url,
-		$ttl_hours
-	);
-
-	if ( ! wp_mail( $email, $subject, $message ) ) {
+	$name       = $user && $user->display_name ? $user->display_name : __( 'there', 'identity-security-kit' );
+	if ( ! identity_security_kit_send_transactional_email(
+		$email,
+		$subject,
+		array(
+			'preheader'    => __( 'Verify your email address to activate account security.', 'identity-security-kit' ),
+			'title'        => __( 'Verify your email address', 'identity-security-kit' ),
+			'greeting'     => sprintf( __( 'Hello %s,', 'identity-security-kit' ), $name ),
+			'intro'        => __( 'Please verify your email address to secure your account.', 'identity-security-kit' ),
+			'details'      => array( sprintf( __( 'This link remains valid for %d hour(s).', 'identity-security-kit' ), $ttl_hours ) ),
+			'action_url'   => $verify_url,
+			'action_label' => __( 'Verify email address', 'identity-security-kit' ),
+			'notice'       => __( 'If you did not request this, ignore this email.', 'identity-security-kit' ),
+		)
+	) ) {
 		$wpdb->update(
 			$table,
 			array( 'status' => 'delivery_failed', 'token_hash' => '' ),
