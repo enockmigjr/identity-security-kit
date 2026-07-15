@@ -116,6 +116,11 @@ try {
 	);
 	identity_runtime_assert( ! is_wp_error( $user_id ), 'Runtime user creation failed.' );
 	$user_ids[] = (int) $user_id;
+	$runtime_user = get_user_by( 'id', $user_id );
+	$booking_redirect = home_url( '/booking/?type=portrait' );
+	identity_runtime_assert( $booking_redirect === identity_security_kit_get_login_redirect( $runtime_user, $booking_redirect ), 'A valid local post-login destination was not preserved.' );
+	$default_redirect_key = user_can( $runtime_user, 'photovault_manage_media' ) || user_can( $runtime_user, 'manage_options' ) ? 'dashboard' : 'after_login';
+	identity_runtime_assert( identity_security_kit_get_route_url( $default_redirect_key ) === identity_security_kit_get_login_redirect( $runtime_user, 'https://attacker.example/redirect' ), 'An external post-login redirect was accepted.' );
 	identity_runtime_assert( identity_security_kit_user_requires_mfa( $user_id ), 'The privileged test role is not subject to MFA policy.' );
 	$deadline = identity_security_kit_get_mfa_deadline( $user_id );
 	identity_runtime_assert( $deadline >= time() + ( 14 * DAY_IN_SECONDS ) && $deadline <= time() + ( 16 * DAY_IN_SECONDS ), 'The configured 15-day grace deadline is invalid.' );
@@ -320,6 +325,7 @@ try {
 			'mfa_lifecycle'      => 'channel_removal_and_last_factor_policy_validated',
 			'mfa_grace_days'     => 15,
 			'mfa_reminders'      => array( 1, 7, 12 ),
+			'login_redirect'     => 'local_preserved_external_rejected',
 		)
 	);
 } finally {

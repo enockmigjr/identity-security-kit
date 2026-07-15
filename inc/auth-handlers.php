@@ -50,6 +50,20 @@ function identity_security_kit_get_route_url( $key ) {
 }
 
 /**
+ * Resolve a post-login destination while rejecting external redirect targets.
+ *
+ * @param WP_User $user               Authenticated user.
+ * @param string  $requested_redirect Optional destination supplied by the local login form.
+ * @return string
+ */
+function identity_security_kit_get_login_redirect( $user, $requested_redirect = '' ) {
+	$redirect_key = user_can( $user, 'photovault_manage_media' ) || user_can( $user, 'manage_options' ) ? 'dashboard' : 'after_login';
+	$fallback     = identity_security_kit_get_route_url( $redirect_key );
+
+	return wp_validate_redirect( is_scalar( $requested_redirect ) ? (string) $requested_redirect : '', $fallback );
+}
+
+/**
  * Redirect safely to a configured route.
  *
  * @param string              $key  Route key.
@@ -187,9 +201,10 @@ function identity_security_kit_handle_login() {
 		identity_security_kit_redirect( 'login', array( 'login' => 'failed' ) );
 	}
 
-	$redirect_key = user_can( $user, 'photovault_manage_media' ) || user_can( $user, 'manage_options' ) ? 'dashboard' : 'after_login';
+	$requested_redirect = isset( $_POST['redirect_to'] ) ? wp_unslash( $_POST['redirect_to'] ) : '';
+	$redirect_url       = identity_security_kit_get_login_redirect( $user, $requested_redirect );
 	if ( function_exists( 'identity_security_kit_user_has_mfa_method' ) && identity_security_kit_user_has_mfa_method( $user->ID ) ) {
-		$challenge_url = identity_security_kit_create_login_challenge( $user->ID, $remember, identity_security_kit_get_route_url( $redirect_key ) );
+		$challenge_url = identity_security_kit_create_login_challenge( $user->ID, $remember, $redirect_url );
 		if ( is_wp_error( $challenge_url ) ) {
 			identity_security_kit_log_event( 'login_mfa_challenge_failed', 'failure', $user->ID, array( 'reason' => $challenge_url->get_error_code() ) );
 			identity_security_kit_redirect( 'login', array( 'login' => 'failed' ) );
@@ -202,7 +217,8 @@ function identity_security_kit_handle_login() {
 	wp_set_auth_cookie( $user->ID, $remember, is_ssl() );
 	do_action( 'wp_login', $user->user_login, $user );
 	identity_security_kit_log_event( 'login_success', 'success', $user->ID );
-	identity_security_kit_redirect( $redirect_key );
+	wp_safe_redirect( $redirect_url );
+	exit;
 }
 add_action( 'template_redirect', 'identity_security_kit_handle_login' );
 
