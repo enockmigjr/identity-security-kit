@@ -115,6 +115,24 @@ function identity_security_kit_handle_totp_disable() {
 }
 add_action( 'admin_post_identity_security_kit_totp_disable', 'identity_security_kit_handle_totp_disable' );
 
+/** Load the local QR renderer only while an authenticator enrollment is visible. */
+function identity_security_kit_enqueue_totp_qr_assets() {
+	wp_enqueue_script(
+		'identity-security-kit-qrcode',
+		IDENTITY_SECURITY_KIT_URL . 'assets/vendor/qrcodejs/qrcode.min.js',
+		array(),
+		'04f46c6',
+		true
+	);
+	wp_enqueue_script(
+		'identity-security-kit-mfa-qr',
+		IDENTITY_SECURITY_KIT_URL . 'assets/js/mfa-qr.js',
+		array( 'identity-security-kit-qrcode' ),
+		IDENTITY_SECURITY_KIT_VERSION,
+		true
+	);
+}
+
 /**
  * Render the reusable account MFA panel.
  *
@@ -128,6 +146,10 @@ function identity_security_kit_render_mfa_panel() {
 	$enabled       = identity_security_kit_is_totp_enabled( $user_id );
 	$pending       = identity_security_kit_get_pending_totp_secret( $user_id );
 	$pending_valid = ! is_wp_error( $pending );
+	$totp_uri      = $pending_valid ? identity_security_kit_get_totp_uri( $user_id, $pending ) : new WP_Error( 'totp_enrollment_missing' );
+	if ( ! is_wp_error( $totp_uri ) ) {
+		identity_security_kit_enqueue_totp_qr_assets();
+	}
 	$recovery      = isset( $_GET['recovery'] ) ? sanitize_text_field( wp_unslash( $_GET['recovery'] ) ) : '';
 	$codes         = $recovery ? identity_security_kit_take_recovery_display( $user_id, $recovery ) : array();
 	$remaining     = get_user_meta( $user_id, 'identity_mfa_recovery_codes', true );
@@ -173,10 +195,15 @@ function identity_security_kit_render_mfa_panel() {
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_totp_disable"><?php wp_nonce_field( 'identity_security_kit_totp_disable' ); ?><label><?php esc_html_e( 'Current password', 'identity-security-kit' ); ?> <input type="password" name="current_password" autocomplete="current-password" required></label> <label><?php esc_html_e( 'Authenticator or recovery code', 'identity-security-kit' ); ?> <input name="mfa_code" autocomplete="one-time-code" required></label> <button type="submit"><?php esc_html_e( 'Disable', 'identity-security-kit' ); ?></button></form>
 			</details>
 		<?php elseif ( $pending_valid ) : ?>
-			<?php $uri = identity_security_kit_get_totp_uri( $user_id, $pending ); ?>
-			<p><?php esc_html_e( 'Add this account manually to your authenticator application, then confirm a code.', 'identity-security-kit' ); ?></p>
+			<p><?php esc_html_e( 'Scan this QR code with an authenticator application, then confirm a current code.', 'identity-security-kit' ); ?></p>
+			<?php if ( ! is_wp_error( $totp_uri ) ) : ?>
+				<div class="identity-totp-qr" data-identity-totp-uri="<?php echo esc_attr( $totp_uri ); ?>">
+					<div class="identity-totp-qr__canvas" role="img" aria-label="<?php esc_attr_e( 'Authenticator enrollment QR code', 'identity-security-kit' ); ?>"></div>
+				</div>
+			<?php endif; ?>
+			<p><?php esc_html_e( 'Manual setup key', 'identity-security-kit' ); ?></p>
 			<p><code><?php echo esc_html( $pending ); ?></code></p>
-			<?php if ( ! is_wp_error( $uri ) ) : ?><p><a href="<?php echo esc_url( $uri, array( 'otpauth' ) ); ?>"><?php esc_html_e( 'Open in an authenticator application', 'identity-security-kit' ); ?></a></p><?php endif; ?>
+			<?php if ( ! is_wp_error( $totp_uri ) ) : ?><p><a href="<?php echo esc_url( $totp_uri, array( 'otpauth' ) ); ?>"><?php esc_html_e( 'Open in an authenticator application', 'identity-security-kit' ); ?></a></p><?php endif; ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_totp_confirm"><?php wp_nonce_field( 'identity_security_kit_totp_confirm' ); ?><label><?php esc_html_e( 'Six-digit code', 'identity-security-kit' ); ?> <input name="otp_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label> <button type="submit"><?php esc_html_e( 'Enable', 'identity-security-kit' ); ?></button></form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_totp_cancel"><?php wp_nonce_field( 'identity_security_kit_totp_cancel' ); ?><button type="submit"><?php esc_html_e( 'Cancel enrollment', 'identity-security-kit' ); ?></button></form>
 		<?php else : ?>
@@ -185,6 +212,7 @@ function identity_security_kit_render_mfa_panel() {
 		<?php endif; ?>
 		<?php echo identity_security_kit_render_mfa_channels_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 	</div>
+	<style>.identity-totp-qr{display:inline-flex;background:#fff;border:1px solid #dcdcde;padding:12px}.identity-totp-qr__canvas{width:220px;height:220px}.identity-totp-qr__canvas canvas,.identity-totp-qr__canvas img{display:block;width:220px;height:220px;image-rendering:pixelated}</style>
 	<?php
 
 	return (string) ob_get_clean();

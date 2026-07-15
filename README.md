@@ -13,6 +13,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Normaliser et rendre uniques les numeros internationaux E.164, puis verifier leur possession par OTP SMS.
 - Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
 - Enroler et verifier les facteurs TOTP, email et SMS, avec choix de methode au login.
+- Afficher un QR code d'enrolement Authenticator genere localement, tout en conservant la cle manuelle et le lien `otpauth://` comme solutions de repli.
 - Desactiver les facteurs TOTP, email et SMS apres re-authentification, sans permettre a un compte soumis au MFA de retirer son dernier facteur.
 - Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
 - Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
@@ -133,11 +134,12 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
 11. Executer `wp eval-file tests/runtime-email-templates.php` pour verifier layout responsive, sanitization, OTP, CTA, `AltBody` PHPMailer et remise SMTP.
+12. Executer `wp eval-file tests/runtime-totp-qr.php` pour verifier URI locale, assets epingles, checksum fournisseur et repli manuel.
+13. Executer `node tests/browser-totp-qr.js` avec les variables `IDENTITY_TEST_*` adaptees aux routes et selecteurs du projet pour verifier le canvas, ses pixels et les requetes same-origin.
 
 ## Reste majeur
 
 - Validation des plans de numerotation par une librairie reconnue et UX pays/indicatif.
-- QR Code TOTP accessible.
 - Remplacement guide des facteurs et validation des changements concurrents en navigateur.
 - Provider SMS reel valide en staging/production; les tests actuels utilisent l'adaptateur generique controle.
 - Cas multisite et changement direct des capabilities d'un role hors API utilisateur.
@@ -148,7 +150,9 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 - [WordPress Nonces](https://developer.wordpress.org/apis/security/nonces/)
 - [WordPress Password Hashing API](https://developer.wordpress.org/reference/functions/wp_check_password/)
 - [WordPress send_confirmation_on_profile_email](https://developer.wordpress.org/reference/functions/send_confirmation_on_profile_email/)
+- [WordPress wp_enqueue_script](https://developer.wordpress.org/reference/functions/wp_enqueue_script/)
 - [WordPress Scheduling WP-Cron Events](https://developer.wordpress.org/plugins/cron/scheduling-wp-cron-events/)
 - [WordPress add_user_role hook](https://developer.wordpress.org/reference/hooks/add_user_role/)
 - [RFC 6238 - TOTP](https://www.rfc-editor.org/rfc/rfc6238)
 - [NIST SP 800-63B - Authentication and Lifecycle Management](https://pages.nist.gov/800-63-4/sp800-63b.html)
+- [QRCode.js](https://github.com/davidshimjs/qrcodejs) - bibliotheque MIT embarquee au commit `04f46c6`; aucun secret TOTP n'est transmis a un service distant.
