@@ -18,6 +18,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Imposer une grace MFA configurable de 15 jours aux comptes portant des capabilities sensibles.
 - Envoyer des rappels MFA J+1, J+7 et J+12 par cron borne et idempotent, puis reconciler les changements de roles et de politique.
 - Rendre les emails de verification, reset, OTP, changement d'adresse, MFA et rappels en HTML responsive avec alternative texte multipart.
+- Exposer le meme layout transactionnel aux integrations metier avec un `Reply-To` optionnel valide.
 - Adapter aussi les notifications natives WordPress `Email Changed` et `Password Changed` sans les desactiver.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.

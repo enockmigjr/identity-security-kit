@@ -96,7 +96,7 @@ function identity_security_kit_render_email_html( $content ) {
 				<?php if ( '' !== $content['action_url'] && '' !== $content['action_label'] ) : ?><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0;"><tr><td style="background:<?php echo esc_attr( $accent ); ?>;"><a href="<?php echo esc_url( $content['action_url'] ); ?>" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;"><?php echo esc_html( $content['action_label'] ); ?></a></td></tr></table><p style="margin:0 0 20px;font-size:12px;line-height:1.6;color:#656b65;overflow-wrap:anywhere;"><?php echo esc_html( $content['action_url'] ); ?></p><?php endif; ?>
 				<?php if ( '' !== $content['notice'] ) : ?><div style="margin-top:28px;padding:16px;border-left:3px solid <?php echo esc_attr( $accent ); ?>;background:#f7f7f5;font-size:13px;line-height:1.6;color:#4a4f49;"><?php echo esc_html( $content['notice'] ); ?></div><?php endif; ?>
 			</td></tr>
-			<tr><td style="padding:20px 32px;border-top:1px solid #e9e6df;font-size:12px;line-height:1.6;color:#686d68;"><?php echo esc_html( sprintf( __( 'Automated security message from %s.', 'identity-security-kit' ), $brand['name'] ) ); ?> <a href="<?php echo esc_url( $brand['website'] ); ?>" style="color:<?php echo esc_attr( $accent ); ?>;"><?php esc_html_e( 'Visit the website', 'identity-security-kit' ); ?></a></td></tr>
+			<tr><td style="padding:20px 32px;border-top:1px solid #e9e6df;font-size:12px;line-height:1.6;color:#686d68;"><?php echo esc_html( sprintf( __( 'Automated message from %s.', 'identity-security-kit' ), $brand['name'] ) ); ?> <a href="<?php echo esc_url( $brand['website'] ); ?>" style="color:<?php echo esc_attr( $accent ); ?>;"><?php esc_html_e( 'Visit the website', 'identity-security-kit' ); ?></a></td></tr>
 		</table>
 	</td></tr></table>
 </body></html><?php
@@ -105,9 +105,10 @@ function identity_security_kit_render_email_html( $content ) {
 }
 
 /** Send one scoped multipart transactional email through the WordPress stack. */
-function identity_security_kit_send_transactional_email( $to, $subject, $content ) {
+function identity_security_kit_send_transactional_email( $to, $subject, $content, $reply_to = '' ) {
 	$to      = sanitize_email( $to );
 	$subject = sanitize_text_field( $subject );
+	$reply_to = sanitize_email( $reply_to );
 	if ( ! is_email( $to ) || '' === $subject ) {
 		return false;
 	}
@@ -117,9 +118,13 @@ function identity_security_kit_send_transactional_email( $to, $subject, $content
 	$set_alt_body = static function ( $phpmailer ) use ( $alt_body ) {
 		$phpmailer->AltBody = $alt_body;
 	};
+	$headers = array( 'Content-Type: text/html; charset=UTF-8' );
+	if ( is_email( $reply_to ) ) {
+		$headers[] = 'Reply-To: ' . $reply_to;
+	}
 	add_action( 'phpmailer_init', $set_alt_body );
 	try {
-		return wp_mail( $to, $subject, $html, array( 'Content-Type: text/html; charset=UTF-8' ) );
+		return wp_mail( $to, $subject, $html, $headers );
 	} finally {
 		remove_action( 'phpmailer_init', $set_alt_body );
 	}

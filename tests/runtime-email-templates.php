@@ -42,12 +42,13 @@ try {
 		'action_label' => 'Confirm securely',
 		'notice'       => 'Never share this code. Ignore this email if you did not request it.',
 	);
-	$sent = identity_security_kit_send_transactional_email( 'identity-template-runtime@photovault.test', '[PhotoVault] Runtime professional email', $content );
+	$sent = identity_security_kit_send_transactional_email( 'identity-template-runtime@photovault.test', '[PhotoVault] Runtime professional email', $content, 'reply-runtime@photovault.test' );
 	identity_email_templates_assert( true === $sent, 'Professional identity email was not handed to wp_mail.' );
 	identity_email_templates_assert( false !== strpos( $captured_mail['message'], '<table role="presentation"' ), 'Responsive table email layout is missing.' );
 	identity_email_templates_assert( false !== strpos( $captured_mail['message'], '483921' ) && false !== strpos( $captured_mail['message'], 'Confirm securely' ), 'OTP or secure CTA is missing from HTML.' );
 	identity_email_templates_assert( false === strpos( $captured_mail['message'], '<script' ), 'Untrusted detail content reached the HTML email.' );
 	identity_email_templates_assert( in_array( 'Content-Type: text/html; charset=UTF-8', $captured_mail['headers'], true ), 'HTML content type was not scoped to the email.' );
+	identity_email_templates_assert( in_array( 'Reply-To: reply-runtime@photovault.test', $captured_mail['headers'], true ), 'Validated Reply-To was not handed to wp_mail.' );
 	identity_email_templates_assert( false !== strpos( $alt_body, 'Your one-time security code is: 483921' ), 'PHPMailer AltBody does not contain the OTP.' );
 	identity_email_templates_assert( false !== strpos( $alt_body, 'Confirm securely:' ) && false !== strpos( $alt_body, 'identity-runtime-confirm=1' ), 'PHPMailer AltBody does not contain the secure action.' );
 	identity_email_templates_assert( false === identity_security_kit_send_transactional_email( 'invalid', 'Invalid recipient', $content ), 'Invalid recipient was accepted.' );
@@ -60,6 +61,7 @@ try {
 			'phpmailer_alt_body' => true,
 			'otp_component'    => true,
 			'cta_component'    => true,
+			'reply_to'         => 'validated',
 			'wp_mail'          => true,
 		)
 	);
