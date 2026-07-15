@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.11.1
+ * Version: 0.12.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,9 +11,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.11.1' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.12.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IDENTITY_SECURITY_KIT_URL', plugin_dir_url( __FILE__ ) );
+
+$identity_security_kit_autoload = IDENTITY_SECURITY_KIT_DIR . 'vendor/autoload.php';
+if ( file_exists( $identity_security_kit_autoload ) ) {
+	require_once $identity_security_kit_autoload;
+}
 
 /**
  * Return the public capabilities managed by the plugin.

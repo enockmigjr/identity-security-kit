@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'photovault/identity-security-kit',
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '8305d72aa3cbdc7c017095d7a7b2c87e0faacc04',
+        'type' => 'wordpress-plugin',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'giggsey/libphonenumber-for-php-lite' => array(
+            'pretty_version' => '9.0.34',
+            'version' => '9.0.34.0',
+            'reference' => 'a9f129a296b1e31f7f9b73fd81845415d302bee2',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../giggsey/libphonenumber-for-php-lite',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'photovault/identity-security-kit' => array(
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '8305d72aa3cbdc7c017095d7a7b2c87e0faacc04',
+            'type' => 'wordpress-plugin',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'symfony/polyfill-mbstring' => array(
+            'pretty_version' => 'v1.38.2',
+            'version' => '1.38.2.0',
+            'reference' => 'd3d318bad5e7a1bfbd026009c8bfb8d8f99ae6b6',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../symfony/polyfill-mbstring',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

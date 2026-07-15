@@ -49,6 +49,7 @@ function identity_security_kit_test_assert( $condition, $message ) {
 	}
 }
 
+require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 require_once dirname( __DIR__ ) . '/inc/totp-algorithm.php';
 require_once dirname( __DIR__ ) . '/inc/secret-storage.php';
 require_once dirname( __DIR__ ) . '/inc/phone.php';
@@ -79,6 +80,7 @@ identity_security_kit_test_assert( '+2290123456789' === $phone, 'E.164 formattin
 identity_security_kit_test_assert( is_wp_error( identity_security_kit_normalize_phone( '01 23 45 67 89' ) ), 'E.164 country prefix required' );
 identity_security_kit_test_assert( is_wp_error( identity_security_kit_normalize_phone( '+00012345678' ) ), 'E.164 rejects a zero country code' );
 identity_security_kit_test_assert( is_wp_error( identity_security_kit_normalize_phone( '+229123' ) ), 'E.164 rejects short numbers' );
+identity_security_kit_test_assert( is_wp_error( identity_security_kit_normalize_phone( '+22997000034' ) ), 'Numbering-plan validation rejects obsolete Benin format' );
 
 $encrypted = identity_security_kit_encrypt_secret( $base32_secret );
 identity_security_kit_test_assert( ! is_wp_error( $encrypted ), 'Secret encryption provider available' );

@@ -82,28 +82,35 @@ function identity_security_kit_render_mfa_channels_panel() {
 	<section class="identity-security-mfa-channels">
 		<h3><?php esc_html_e( 'Additional verification methods', 'identity-security-kit' ); ?></h3>
 		<?php if ( in_array( 'email', $allowed, true ) ) : ?>
-			<h4><?php esc_html_e( 'Email security code', 'identity-security-kit' ); ?></h4>
-			<?php if ( function_exists( 'identity_security_kit_is_email_verified' ) && identity_security_kit_is_email_verified( $user_id ) ) : ?>
-				<?php echo identity_security_kit_render_remote_factor_enrollment( $user_id, 'email', $challenge_method, $challenge_id, $disable_method, $disable_challenge_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php else : ?><p><?php esc_html_e( 'Verify your account email before enabling this method.', 'identity-security-kit' ); ?></p><?php endif; ?>
+			<article class="identity-security-mfa-method" data-mfa-method="email">
+				<h4><?php esc_html_e( 'Email security code', 'identity-security-kit' ); ?></h4>
+				<?php if ( function_exists( 'identity_security_kit_is_email_verified' ) && identity_security_kit_is_email_verified( $user_id ) ) : ?>
+					<?php echo identity_security_kit_render_remote_factor_enrollment( $user_id, 'email', $challenge_method, $challenge_id, $disable_method, $disable_challenge_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php else : ?><p><?php esc_html_e( 'Verify your account email before enabling this method.', 'identity-security-kit' ); ?></p><?php endif; ?>
+			</article>
 		<?php endif; ?>
 
 		<?php if ( in_array( 'sms', $allowed, true ) ) : ?>
-			<?php echo identity_security_kit_render_phone_verification_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php if ( identity_security_kit_is_phone_verified( $user_id ) ) : ?>
-				<?php echo identity_security_kit_render_remote_factor_enrollment( $user_id, 'sms', $challenge_method, $challenge_id, $disable_method, $disable_challenge_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php endif; ?>
+			<article class="identity-security-mfa-method" data-mfa-method="sms">
+				<h4><?php esc_html_e( 'SMS security code', 'identity-security-kit' ); ?></h4>
+				<?php echo identity_security_kit_render_phone_verification_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php if ( identity_security_kit_is_phone_verified( $user_id ) ) : ?>
+					<?php echo identity_security_kit_render_remote_factor_enrollment( $user_id, 'sms', $challenge_method, $challenge_id, $disable_method, $disable_challenge_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php endif; ?>
+			</article>
 		<?php endif; ?>
 
 		<?php if ( count( $enabled ) > 1 ) : ?>
-			<h4><?php esc_html_e( 'Preferred verification method', 'identity-security-kit' ); ?></h4>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="identity_security_kit_mfa_preference">
-				<?php wp_nonce_field( 'identity_security_kit_mfa_preference' ); ?>
-				<select name="mfa_method"><?php foreach ( $enabled as $method ) : ?><option value="<?php echo esc_attr( $method ); ?>" <?php selected( $preferred, $method ); ?>><?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?></option><?php endforeach; ?></select>
-				<label><?php esc_html_e( 'Current password', 'identity-security-kit' ); ?> <input type="password" name="current_password" autocomplete="current-password" required></label>
-				<button type="submit"><?php esc_html_e( 'Save preference', 'identity-security-kit' ); ?></button>
-			</form>
+			<article class="identity-security-mfa-method" data-mfa-method="preferred">
+				<h4><?php esc_html_e( 'Preferred verification method', 'identity-security-kit' ); ?></h4>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="identity_security_kit_mfa_preference">
+					<?php wp_nonce_field( 'identity_security_kit_mfa_preference' ); ?>
+					<label><?php esc_html_e( 'Method', 'identity-security-kit' ); ?><select name="mfa_method"><?php foreach ( $enabled as $method ) : ?><option value="<?php echo esc_attr( $method ); ?>" <?php selected( $preferred, $method ); ?>><?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?></option><?php endforeach; ?></select></label>
+					<label><?php esc_html_e( 'Current password', 'identity-security-kit' ); ?> <input type="password" name="current_password" autocomplete="current-password" required></label>
+					<button type="submit"><?php esc_html_e( 'Save preference', 'identity-security-kit' ); ?></button>
+				</form>
+			</article>
 		<?php endif; ?>
 	</section>
 	<?php

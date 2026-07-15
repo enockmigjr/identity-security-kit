@@ -34,12 +34,21 @@ function identity_security_kit_normalize_phone( $phone ) {
 		return new WP_Error( 'phone_country_code_required', __( 'Include the country prefix, for example +229.', 'identity-security-kit' ) );
 	}
 
-	$digits = preg_replace( '/[^0-9]/', '', substr( $phone, 1 ) );
-	if ( ! is_string( $digits ) || ! preg_match( '/^[1-9][0-9]{7,14}$/', $digits ) ) {
-		return new WP_Error( 'phone_invalid', __( 'Enter a valid international phone number.', 'identity-security-kit' ) );
+	if ( ! class_exists( '\\libphonenumber\\PhoneNumberUtil' ) ) {
+		return new WP_Error( 'phone_validation_unavailable', __( 'Phone number validation is temporarily unavailable.', 'identity-security-kit' ) );
 	}
 
-	return '+' . $digits;
+	try {
+		$phone_util = \libphonenumber\PhoneNumberUtil::getInstance();
+		$parsed     = $phone_util->parse( $phone, null );
+		if ( ! $phone_util->isValidNumber( $parsed ) ) {
+			return new WP_Error( 'phone_invalid', __( 'Enter a valid international phone number.', 'identity-security-kit' ) );
+		}
+
+		return $phone_util->format( $parsed, \libphonenumber\PhoneNumberFormat::E164 );
+	} catch ( \libphonenumber\NumberParseException $exception ) {
+		return new WP_Error( 'phone_invalid', __( 'Enter a valid international phone number.', 'identity-security-kit' ) );
+	}
 }
 
 /** Find a user by normalized phone without exposing phone login by default. */

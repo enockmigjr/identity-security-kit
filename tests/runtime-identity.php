@@ -39,7 +39,7 @@ $email_table    = identity_security_kit_get_email_verification_table();
 $otp_table      = identity_security_kit_get_otp_table();
 $audit_table    = identity_security_kit_get_audit_table();
 $primary_email  = 'identity-runtime@photovault.test';
-$primary_phone  = '+22997000034';
+$primary_phone  = '+2290197000034';
 
 add_filter(
 	'wp_mail',
@@ -145,7 +145,7 @@ try {
 	identity_runtime_assert( true === $result && identity_security_kit_is_email_verified( $user_id ), 'The current email could not be verified.' );
 	identity_runtime_assert( 'email_challenge_invalid' === identity_runtime_error_code( identity_security_kit_verify_email_challenge( $user_id, $token ) ), 'Email verification token replay was accepted.' );
 
-	$result = identity_security_kit_set_user_phone( $user_id, '+229 97 00 00 34' );
+	$result = identity_security_kit_set_user_phone( $user_id, '+229 01 97 00 00 34' );
 	identity_runtime_assert( true === $result && $primary_phone === get_user_meta( $user_id, identity_security_kit_phone_meta_key(), true ), 'E.164 phone normalization or storage failed.' );
 	$duplicate_id = wp_insert_user(
 		array(

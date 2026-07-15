@@ -2,6 +2,8 @@
 
 Identity Security Kit est un plugin WordPress reutilisable pour les flux d'identite: login, inscription, profil, reset password, verification email, politiques de base et audit securite.
 
+Les dependances Composer de production sont embarquees dans le plugin. `giggsey/libphonenumber-for-php-lite` valide les plans de numerotation internationaux et normalise les numeros au format E.164 avant stockage, sans les donnees de geolocalisation inutilisees.
+
 ## Responsabilites
 
 - Gerer les formulaires frontend login/register/profile/forgot password.
