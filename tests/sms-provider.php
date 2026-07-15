@@ -7,6 +7,8 @@ define( 'ABSPATH', __DIR__ );
 define( 'IDENTITY_SECURITY_TWILIO_ACCOUNT_SID', 'ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' );
 define( 'IDENTITY_SECURITY_TWILIO_AUTH_TOKEN', 'test-auth-token' );
 define( 'IDENTITY_SECURITY_TWILIO_FROM', '+15551234567' );
+define( 'IDENTITY_SECURITY_BREVO_API_KEY', 'runtime-brevo-key' );
+define( 'IDENTITY_SECURITY_BREVO_SMS_SENDER', 'PhotoVault' );
 
 $test_settings = array( 'sms_provider' => 'twilio' );
 $test_response = array( 'response' => array( 'code' => 201 ), 'body' => '{"sid":"SM123"}' );
@@ -43,6 +45,12 @@ function wp_remote_post( $url, $args ) {
 	$test_request = array( 'url' => $url, 'args' => $args );
 	return $test_response;
 }
+function wp_safe_remote_post( $url, $args ) {
+	return wp_remote_post( $url, $args );
+}
+function wp_json_encode( $value ) {
+	return json_encode( $value );
+}
 function wp_remote_retrieve_response_code( $response ) {
 	return (int) $response['response']['code'];
 }
@@ -73,5 +81,15 @@ $test_response = array( 'response' => array( 'code' => 429 ), 'body' => '{"code"
 $result        = identity_security_kit_send_sms( '+22997000034', 'Security code' );
 assert_true( is_wp_error( $result ), 'Provider failures must fail closed.' );
 assert_same( 'sms_provider_rejected', $result->get_error_code(), 'Provider failure must expose a stable internal code.' );
+
+$test_settings = array( 'sms_provider' => 'brevo' );
+$test_response = array( 'response' => array( 'code' => 201 ), 'body' => '{"messageId":1511882900176220}' );
+$result = identity_security_kit_send_sms( '+2290197000034', 'Security code', array( 'purpose' => 'mfa_login', 'idempotency_key' => str_repeat( 'b', 64 ) ) );
+assert_true( $result, 'Brevo success response must be accepted.' );
+assert_same( 'https://api.brevo.com/v3/transactionalSMS/send', $test_request['url'], 'Brevo endpoint must be fixed.' );
+$brevo_body = json_decode( $test_request['args']['body'], true );
+assert_same( '2290197000034', $brevo_body['recipient'], 'Brevo recipient must be an international digit string.' );
+assert_same( 'transactional', $brevo_body['type'], 'Security codes must use transactional SMS.' );
+assert_same( 'runtime-brevo-key', $test_request['args']['headers']['api-key'], 'Brevo API key must stay in a request header.' );
 
 echo "SMS provider tests passed.\n";

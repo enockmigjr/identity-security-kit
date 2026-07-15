@@ -30,6 +30,10 @@ function identity_security_kit_get_sms_provider() {
 /** Determine whether the selected SMS provider can deliver messages. */
 function identity_security_kit_sms_provider_available() {
 	$provider = identity_security_kit_get_sms_provider();
+	if ( 'brevo' === $provider ) {
+		return '' !== identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_BREVO_API_KEY' )
+			&& '' !== identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_BREVO_SMS_SENDER' );
+	}
 	if ( 'twilio' === $provider ) {
 		return '' !== identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_TWILIO_ACCOUNT_SID' )
 			&& '' !== identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_TWILIO_AUTH_TOKEN' )
@@ -37,6 +41,54 @@ function identity_security_kit_sms_provider_available() {
 	}
 
 	return (bool) apply_filters( 'identity_security_kit_sms_provider_available', false, $provider );
+}
+
+/** Deliver a transactional security code through Brevo's fixed endpoint. */
+function identity_security_kit_send_sms_via_brevo( $phone, $message, $context ) {
+	$api_key = identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_BREVO_API_KEY' );
+	$sender  = identity_security_kit_get_provider_secret( 'IDENTITY_SECURITY_BREVO_SMS_SENDER' );
+	if ( '' === $api_key || '' === $sender ) {
+		return new WP_Error( 'sms_provider_not_configured', __( 'The SMS provider is not configured.', 'identity-security-kit' ) );
+	}
+	if ( ! preg_match( '/^[A-Za-z0-9]{3,11}$/', $sender ) ) {
+		return new WP_Error( 'sms_provider_invalid', __( 'The SMS provider configuration is invalid.', 'identity-security-kit' ) );
+	}
+	$recipient = ltrim( preg_replace( '/[^+0-9]/', '', (string) $phone ), '+' );
+	if ( ! preg_match( '/^[1-9][0-9]{7,14}$/', $recipient ) ) {
+		return new WP_Error( 'sms_provider_invalid_recipient', __( 'The SMS recipient is invalid.', 'identity-security-kit' ) );
+	}
+	$payload = array(
+		'sender'    => $sender,
+		'recipient' => $recipient,
+		'content'   => (string) $message,
+		'type'      => 'transactional',
+		'tag'       => substr( sanitize_key( $context['purpose'] ?? 'identity_security' ), 0, 50 ),
+	);
+	$response = wp_safe_remote_post(
+		'https://api.brevo.com/v3/transactionalSMS/send',
+		array(
+			'timeout'     => 10,
+			'redirection' => 0,
+			'headers'     => array(
+				'Accept'          => 'application/json',
+				'Content-Type'    => 'application/json',
+				'api-key'         => $api_key,
+				'Idempotency-Key' => (string) ( $context['idempotency_key'] ?? '' ),
+			),
+			'body'        => wp_json_encode( $payload ),
+			'data_format' => 'body',
+		)
+	);
+	if ( is_wp_error( $response ) ) {
+		return new WP_Error( 'sms_provider_unavailable', __( 'The SMS provider is temporarily unavailable.', 'identity-security-kit' ) );
+	}
+	$status = wp_remote_retrieve_response_code( $response );
+	$body   = json_decode( wp_remote_retrieve_body( $response ), true );
+	if ( $status < 200 || $status >= 300 || ! is_array( $body ) || empty( $body['messageId'] ) ) {
+		return new WP_Error( 'sms_provider_rejected', __( 'The SMS provider rejected the message.', 'identity-security-kit' ) );
+	}
+
+	return true;
 }
 
 /** Mask an international phone number for UI and audit output. */
@@ -104,6 +156,9 @@ function identity_security_kit_send_sms( $phone, $message, $context = array() ) 
 	}
 	if ( 'twilio' === $provider ) {
 		return identity_security_kit_send_sms_via_twilio( $phone, $message, $context );
+	}
+	if ( 'brevo' === $provider ) {
+		return identity_security_kit_send_sms_via_brevo( $phone, $message, $context );
 	}
 
 	return new WP_Error( 'sms_provider_not_configured', __( 'The SMS provider is not configured.', 'identity-security-kit' ) );

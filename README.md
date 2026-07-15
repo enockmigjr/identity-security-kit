@@ -125,6 +125,14 @@ Conception securite: random_int, wp_hash_password, wp_check_password, expiration
 
 References: WordPress Nonces API https://developer.wordpress.org/apis/security/nonces/ ; wp_check_password https://developer.wordpress.org/reference/functions/wp_check_password/ ; NIST SP 800-63B https://pages.nist.gov/800-63-4/sp800-63b.html.
 
+## Fournisseurs SMS
+
+- Brevo recommande: `IDENTITY_SECURITY_BREVO_API_KEY` et `IDENTITY_SECURITY_BREVO_SMS_SENDER` (3 a 11 caracteres alphanumeriques).
+- Twilio alternatif: `IDENTITY_SECURITY_TWILIO_ACCOUNT_SID`, `IDENTITY_SECURITY_TWILIO_AUTH_TOKEN` et `IDENTITY_SECURITY_TWILIO_FROM`.
+- Adaptateur custom: filtres publics documentes ci-dessus.
+
+Les secrets sont lus depuis des constantes ou variables d'environnement. Ils ne sont ni stockes en base ni inclus dans les journaux. Le meme adaptateur alimente la verification du telephone, les OTP et le MFA SMS.
+
 ## Verification minimale
 
 1. Activer le plugin et verifier les tables DB.

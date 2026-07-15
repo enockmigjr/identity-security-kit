@@ -186,7 +186,7 @@ function identity_security_kit_render_admin_page() {
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_provider"><?php esc_html_e( 'SMS provider', 'identity-security-kit' ); ?></label></th>
-							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p class="description"><?php esc_html_e( 'Provider credentials must be injected with environment variables or constants, never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
+							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="brevo" <?php selected( $settings['sms_provider'], 'brevo' ); ?>><?php esc_html_e( 'Brevo SMS (recommended)', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p class="description"><?php esc_html_e( 'Brevo uses IDENTITY_SECURITY_BREVO_API_KEY and IDENTITY_SECURITY_BREVO_SMS_SENDER. Twilio and custom adapters remain available. Secrets are never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_otp_ttl_minutes"><?php esc_html_e( 'SMS OTP policy', 'identity-security-kit' ); ?></label></th>
@@ -347,7 +347,7 @@ function identity_security_kit_handle_save_settings() {
 		'sms_otp_length'                      => 6,
 		'sms_otp_max_attempts'                => isset( $_POST['sms_otp_max_attempts'] ) ? max( 3, min( 10, absint( $_POST['sms_otp_max_attempts'] ) ) ) : 5,
 		'sms_otp_resend_minutes'              => isset( $_POST['sms_otp_resend_minutes'] ) ? max( 1, min( 30, absint( $_POST['sms_otp_resend_minutes'] ) ) ) : 2,
-		'sms_provider'                        => isset( $_POST['sms_provider'] ) && in_array( sanitize_key( wp_unslash( $_POST['sms_provider'] ) ), array( 'disabled', 'twilio', 'custom' ), true ) ? sanitize_key( wp_unslash( $_POST['sms_provider'] ) ) : 'disabled',
+		'sms_provider'                        => isset( $_POST['sms_provider'] ) && in_array( sanitize_key( wp_unslash( $_POST['sms_provider'] ) ), array( 'disabled', 'brevo', 'twilio', 'custom' ), true ) ? sanitize_key( wp_unslash( $_POST['sms_provider'] ) ) : 'disabled',
 		'phone_required'                      => isset( $_POST['phone_required'] ) ? 1 : 0,
 		'mfa_enforcement_enabled'             => isset( $_POST['mfa_enforcement_enabled'] ) ? 1 : 0,
 		'mfa_grace_days'                      => isset( $_POST['mfa_grace_days'] ) ? max( 1, min( 30, absint( $_POST['mfa_grace_days'] ) ) ) : 15,

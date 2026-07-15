@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Identity Security Kit
  * Description: Reusable identity, login, registration, and profile security handlers.
- * Version: 0.12.0
+ * Version: 0.13.0
  * Author: PhotoVault
  * Text Domain: identity-security-kit
  */
@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IDENTITY_SECURITY_KIT_VERSION', '0.12.0' );
+define( 'IDENTITY_SECURITY_KIT_VERSION', '0.13.0' );
 define( 'IDENTITY_SECURITY_KIT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IDENTITY_SECURITY_KIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -39,6 +39,10 @@ function identity_security_kit_get_capabilities() {
  * @return array<string,mixed>
  */
 function identity_security_kit_get_default_settings() {
+	$brevo_key    = defined( 'IDENTITY_SECURITY_BREVO_API_KEY' ) ? trim( (string) IDENTITY_SECURITY_BREVO_API_KEY ) : trim( (string) getenv( 'IDENTITY_SECURITY_BREVO_API_KEY' ) );
+	$brevo_sender = defined( 'IDENTITY_SECURITY_BREVO_SMS_SENDER' ) ? trim( (string) IDENTITY_SECURITY_BREVO_SMS_SENDER ) : trim( (string) getenv( 'IDENTITY_SECURITY_BREVO_SMS_SENDER' ) );
+	$sms_provider = '' !== $brevo_key && '' !== $brevo_sender ? 'brevo' : 'disabled';
+
 	return array(
 		'min_password_length'         => 8,
 		'max_avatar_size_mb'          => 6,
@@ -58,7 +62,7 @@ function identity_security_kit_get_default_settings() {
 		'sms_otp_length'                      => 6,
 		'sms_otp_max_attempts'                => 5,
 		'sms_otp_resend_minutes'              => 2,
-		'sms_provider'                        => 'disabled',
+		'sms_provider'                        => $sms_provider,
 		'phone_required'                      => 1,
 		'mfa_enforcement_enabled'             => 1,
 		'mfa_grace_days'                      => 15,
@@ -96,7 +100,7 @@ function identity_security_kit_get_settings() {
 	$settings['sms_otp_length']                      = max( 6, min( 8, absint( $settings['sms_otp_length'] ) ) );
 	$settings['sms_otp_max_attempts']                = max( 3, min( 10, absint( $settings['sms_otp_max_attempts'] ) ) );
 	$settings['sms_otp_resend_minutes']              = max( 1, min( 30, absint( $settings['sms_otp_resend_minutes'] ) ) );
-	$settings['sms_provider']                        = in_array( sanitize_key( $settings['sms_provider'] ), array( 'disabled', 'twilio', 'custom' ), true ) ? sanitize_key( $settings['sms_provider'] ) : 'disabled';
+	$settings['sms_provider']                        = in_array( sanitize_key( $settings['sms_provider'] ), array( 'disabled', 'brevo', 'twilio', 'custom' ), true ) ? sanitize_key( $settings['sms_provider'] ) : 'disabled';
 	$settings['phone_required']                      = empty( $settings['phone_required'] ) ? 0 : 1;
 	$settings['mfa_enforcement_enabled']             = empty( $settings['mfa_enforcement_enabled'] ) ? 0 : 1;
 	$settings['mfa_grace_days']                      = max( 1, min( 30, absint( $settings['mfa_grace_days'] ) ) );
