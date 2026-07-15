@@ -22,6 +22,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 - Rendre les emails de verification, reset, OTP, changement d'adresse, MFA et rappels en HTML responsive avec alternative texte multipart.
 - Exposer le meme layout transactionnel aux integrations metier avec un `Reply-To` optionnel valide.
 - Adapter aussi les notifications natives WordPress `Email Changed` et `Password Changed` sans les desactiver.
+- Habiller l'email natif du mode de recuperation WordPress sans retirer le diagnostic ni le lien protege.
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.

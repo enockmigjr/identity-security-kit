@@ -177,3 +177,29 @@ function identity_security_kit_filter_password_change_email( $email, $user, $use
 	return $email;
 }
 add_filter( 'password_change_email', 'identity_security_kit_filter_password_change_email', 10, 3 );
+
+/** Render the native WordPress recovery-mode notification with the shared layout. */
+function identity_security_kit_filter_recovery_mode_email( $email, $url ) {
+	$original_message = isset( $email['message'] ) && is_scalar( $email['message'] ) ? (string) $email['message'] : '';
+	$details          = preg_split( '/\r\n|\r|\n/', $original_message );
+	$details          = array_values( array_filter( array_map( 'trim', is_array( $details ) ? $details : array() ) ) );
+	$details          = array_slice( $details, 0, 10 );
+	$content          = array(
+		'preheader'    => __( 'WordPress detected a technical issue that requires administrator attention.', 'identity-security-kit' ),
+		'eyebrow'      => __( 'Site administration', 'identity-security-kit' ),
+		'title'        => __( 'A technical issue was detected', 'identity-security-kit' ),
+		'intro'        => __( 'WordPress paused the affected component and prepared a protected recovery session for the site administrator.', 'identity-security-kit' ),
+		'details'      => $details,
+		'action_url'   => esc_url_raw( $url ),
+		'action_label' => __( 'Open recovery mode', 'identity-security-kit' ),
+		'notice'       => __( 'Use this private link only from a trusted device. Resolve the reported error before leaving recovery mode.', 'identity-security-kit' ),
+	);
+	$brand             = identity_security_kit_get_email_brand();
+	$email['subject']  = sprintf( __( '[%s] Technical issue detected', 'identity-security-kit' ), $brand['name'] );
+	$email['message']  = identity_security_kit_render_email_html( $content );
+	$email['headers']  = 'Content-Type: text/html; charset=UTF-8';
+	identity_security_kit_register_next_email_alt_body( identity_security_kit_render_email_text( $content ) );
+
+	return $email;
+}
+add_filter( 'recovery_mode_email', 'identity_security_kit_filter_recovery_mode_email', 10, 2 );

@@ -52,6 +52,17 @@ try {
 	identity_email_templates_assert( false !== strpos( $alt_body, 'Your one-time security code is: 483921' ), 'PHPMailer AltBody does not contain the OTP.' );
 	identity_email_templates_assert( false !== strpos( $alt_body, 'Confirm securely:' ) && false !== strpos( $alt_body, 'identity-runtime-confirm=1' ), 'PHPMailer AltBody does not contain the secure action.' );
 	identity_email_templates_assert( false === identity_security_kit_send_transactional_email( 'invalid', 'Invalid recipient', $content ), 'Invalid recipient was accepted.' );
+	$recovery = identity_security_kit_filter_recovery_mode_email(
+		array(
+			'to'      => 'admin@photovault.test',
+			'subject' => 'Native recovery subject',
+			'message' => "WordPress caught an error.\nPlugin: Runtime component\nError: Runtime failure",
+			'headers' => '',
+		),
+		home_url( '/wp-login.php?action=enter_recovery_mode&rm_token=runtime' )
+	);
+	identity_email_templates_assert( false !== strpos( $recovery['message'], '<table role="presentation"' ) && false !== strpos( $recovery['message'], 'Runtime component' ), 'Recovery mode lost its professional layout or diagnostic.' );
+	identity_email_templates_assert( false !== strpos( $recovery['message'], 'enter_recovery_mode' ) && false !== strpos( $recovery['headers'], 'text/html' ), 'Recovery mode lost its protected action or HTML header.' );
 
 	echo wp_json_encode(
 		array(
@@ -63,6 +74,7 @@ try {
 			'cta_component'    => true,
 			'reply_to'         => 'validated',
 			'wp_mail'          => true,
+			'recovery_mode'    => true,
 		)
 	);
 } finally {
