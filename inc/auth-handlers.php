@@ -373,6 +373,147 @@ function identity_security_kit_handle_registration() {
 }
 add_action( 'template_redirect', 'identity_security_kit_handle_registration' );
 
+/** Return the requested scoped profile operation. */
+function identity_security_kit_get_profile_action() {
+	$action  = isset( $_POST['profile_action'] ) ? sanitize_key( wp_unslash( $_POST['profile_action'] ) ) : 'legacy';
+	$allowed = array( 'legacy', 'identity', 'avatar', 'phone', 'email', 'password' );
+
+	return in_array( $action, $allowed, true ) ? $action : 'invalid';
+}
+
+/** Update the non-sensitive public profile fields. */
+function identity_security_kit_update_profile_identity( $user_id ) {
+	$display_name = isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '';
+	$bio          = isset( $_POST['bio'] ) ? sanitize_textarea_field( wp_unslash( $_POST['bio'] ) ) : '';
+	$display_name = wp_html_excerpt( $display_name, 250, '' );
+	$bio          = wp_html_excerpt( $bio, 1000, '' );
+	if ( '' === $display_name ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'display_name_required' ) );
+	}
+
+	$result = wp_update_user(
+		array(
+			'ID'           => absint( $user_id ),
+			'display_name' => $display_name,
+			'description'  => $bio,
+		)
+	);
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_log_event( 'profile_identity_failed', 'failure', $user_id, array( 'reason' => $result->get_error_code() ) );
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'failed' ) );
+	}
+
+	identity_security_kit_log_event( 'profile_identity_updated', 'success', $user_id );
+	identity_security_kit_redirect( 'profile', array( 'profile' => 'identity_updated' ) );
+}
+
+/** Update only the profile avatar. */
+function identity_security_kit_update_profile_avatar( $user_id ) {
+	if ( empty( $_FILES['profile_avatar']['name'] ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'avatar_required' ) );
+	}
+
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/media.php';
+
+	$validation = identity_security_kit_validate_uploaded_image_file( $_FILES['profile_avatar'] );
+	if ( is_wp_error( $validation ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $validation->get_error_code() ) ) );
+	}
+
+	$attachment_id = media_handle_upload(
+		'profile_avatar',
+		0,
+		array(),
+		array( 'mimes' => identity_security_kit_get_allowed_image_mimes() )
+	);
+	if ( is_wp_error( $attachment_id ) ) {
+		identity_security_kit_log_event( 'profile_avatar_failed', 'failure', $user_id, array( 'reason' => $attachment_id->get_error_code() ) );
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'avatar_upload_failed' ) );
+	}
+
+	$avatar_meta_key = sanitize_key( apply_filters( 'identity_security_kit_avatar_meta_key', 'photovault_avatar_id' ) );
+	update_user_meta( $user_id, $avatar_meta_key, $attachment_id );
+	identity_security_kit_log_event( 'profile_avatar_updated', 'success', $user_id, array( 'attachment_id' => $attachment_id ) );
+	identity_security_kit_redirect( 'profile', array( 'profile' => 'avatar_updated' ) );
+}
+
+/** Update only the international phone number. */
+function identity_security_kit_update_profile_phone( $user_id ) {
+	$phone    = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+	$settings = identity_security_kit_get_settings();
+	if ( '' === trim( $phone ) ) {
+		$code = ! empty( $settings['phone_required'] ) ? 'phone_required' : 'phone_invalid';
+		identity_security_kit_redirect( 'profile', array( 'profile' => $code ) );
+	}
+
+	$normalized_phone = identity_security_kit_validate_unique_phone( $phone, $user_id );
+	if ( is_wp_error( $normalized_phone ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $normalized_phone->get_error_code() ) ) );
+	}
+
+	$current_phone = (string) get_user_meta( $user_id, identity_security_kit_phone_meta_key(), true );
+	$result        = identity_security_kit_set_user_phone( $user_id, $normalized_phone );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $result->get_error_code() ) ) );
+	}
+	if ( $current_phone !== $normalized_phone ) {
+		update_user_meta( $user_id, 'identity_phone_verified', '0' );
+	}
+
+	identity_security_kit_log_event( 'profile_phone_updated', 'success', $user_id );
+	identity_security_kit_redirect( 'profile', array( 'profile' => 'phone_updated' ) );
+}
+
+/** Start a verified email-address change. */
+function identity_security_kit_update_profile_email( $user_id ) {
+	$new_email       = isset( $_POST['new_email'] ) ? sanitize_email( wp_unslash( $_POST['new_email'] ) ) : '';
+	$current_password = isset( $_POST['email_current_password'] ) ? (string) wp_unslash( $_POST['email_current_password'] ) : '';
+	if ( ! is_email( $new_email ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'email_change_invalid' ) );
+	}
+	if ( ! function_exists( 'identity_security_kit_request_email_change' ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'failed' ) );
+	}
+
+	$result = identity_security_kit_request_email_change( $user_id, $new_email, $current_password );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => sanitize_key( $result->get_error_code() ) ) );
+	}
+
+	identity_security_kit_log_event( 'profile_email_change_requested', 'success', $user_id );
+	identity_security_kit_redirect( 'profile', array( 'email_change' => 'pending' ) );
+}
+
+/** Change the password after explicit re-authentication. */
+function identity_security_kit_update_profile_password( $user_id, $current_user ) {
+	$current_password = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
+	$password         = isset( $_POST['password'] ) ? (string) wp_unslash( $_POST['password'] ) : '';
+	$password_confirm = isset( $_POST['password_confirm'] ) ? (string) wp_unslash( $_POST['password_confirm'] ) : '';
+	if ( '' === $current_password || ! wp_check_password( $current_password, $current_user->user_pass, $user_id ) ) {
+		identity_security_kit_log_event( 'profile_password_reauth_failed', 'warning', $user_id );
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'current_password_invalid' ) );
+	}
+	if ( strlen( $password ) < identity_security_kit_get_min_password_length() ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'weak_password' ) );
+	}
+	if ( $password !== $password_confirm ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'pwd_mismatch' ) );
+	}
+
+	$result = wp_update_user( array( 'ID' => absint( $user_id ), 'user_pass' => $password ) );
+	if ( is_wp_error( $result ) ) {
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'failed' ) );
+	}
+	if ( function_exists( 'identity_security_kit_destroy_other_sessions' ) ) {
+		identity_security_kit_destroy_other_sessions( $user_id );
+	}
+
+	identity_security_kit_log_event( 'profile_password_updated', 'success', $user_id );
+	identity_security_kit_redirect( 'profile', array( 'profile' => 'password_updated' ) );
+}
+
 /**
  * Handle front-office profile updates.
  */
@@ -392,6 +533,26 @@ function identity_security_kit_handle_profile_update() {
 
 	$current_user_id = get_current_user_id();
 	$current_user    = wp_get_current_user();
+	$profile_action  = identity_security_kit_get_profile_action();
+	if ( 'invalid' === $profile_action ) {
+		identity_security_kit_log_event( 'profile_update_rejected', 'warning', $current_user_id, array( 'reason' => 'invalid_action' ) );
+		identity_security_kit_redirect( 'profile', array( 'profile' => 'failed' ) );
+	}
+	if ( 'identity' === $profile_action ) {
+		identity_security_kit_update_profile_identity( $current_user_id );
+	}
+	if ( 'avatar' === $profile_action ) {
+		identity_security_kit_update_profile_avatar( $current_user_id );
+	}
+	if ( 'phone' === $profile_action ) {
+		identity_security_kit_update_profile_phone( $current_user_id );
+	}
+	if ( 'email' === $profile_action ) {
+		identity_security_kit_update_profile_email( $current_user_id );
+	}
+	if ( 'password' === $profile_action ) {
+		identity_security_kit_update_profile_password( $current_user_id, $current_user );
+	}
 	$email           = $current_user->user_email;
 	$requested_email_raw = isset( $_POST['new_email'] ) ? trim( (string) wp_unslash( $_POST['new_email'] ) ) : '';
 	$requested_email     = sanitize_email( $requested_email_raw );

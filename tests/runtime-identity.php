@@ -76,6 +76,15 @@ add_filter(
 );
 
 try {
+	$original_post = $_POST;
+	$_POST         = array();
+	identity_runtime_assert( 'legacy' === identity_security_kit_get_profile_action(), 'Legacy profile submissions are no longer recognized.' );
+	$_POST['profile_action'] = 'avatar';
+	identity_runtime_assert( 'avatar' === identity_security_kit_get_profile_action(), 'The scoped avatar action is not recognized.' );
+	$_POST['profile_action'] = 'unexpected';
+	identity_runtime_assert( 'invalid' === identity_security_kit_get_profile_action(), 'An unknown scoped profile action was accepted.' );
+	$_POST = $original_post;
+
 	foreach ( array( $primary_email, 'identity-runtime-changed@photovault.test', 'identity-runtime-duplicate@photovault.test', 'identity-runtime-grace@photovault.test' ) as $email ) {
 		$existing = get_user_by( 'email', $email );
 		if ( $existing ) {

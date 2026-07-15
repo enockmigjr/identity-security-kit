@@ -5,6 +5,7 @@ Identity Security Kit est un plugin WordPress reutilisable pour les flux d'ident
 ## Responsabilites
 
 - Gerer les formulaires frontend login/register/profile/forgot password.
+- Isoler les modifications de profil (identite, avatar, telephone, email et mot de passe) afin qu'une action ne valide jamais les champs d'une autre.
 - Valider les champs critiques cote serveur.
 - Eviter l'enumeration sur les demandes de reset password.
 - Creer et verifier les challenges de verification email.
