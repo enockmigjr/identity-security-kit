@@ -15,6 +15,7 @@ Les dependances Composer de production sont embarquees dans le plugin. `giggsey/
 - Creer et verifier des OTP email a usage unique avec expiration, verrouillage et anti-rejeu.
 - Normaliser et rendre uniques les numeros internationaux E.164, puis verifier leur possession par OTP SMS.
 - Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
+- Afficher une page d'audit complete, filtrable et paginee par lots de 25 evenements, avec contexte nettoye repliable.
 - Enroler et verifier les facteurs TOTP, email et SMS, avec choix de methode au login.
 - Afficher un QR code d'enrolement Authenticator genere localement, tout en conservant la cle manuelle et le lien `otpauth://` comme solutions de repli.
 - Desactiver les facteurs TOTP, email et SMS apres re-authentification, sans permettre a un compte soumis au MFA de retirer son dernier facteur.
@@ -133,6 +134,29 @@ References: WordPress Nonces API https://developer.wordpress.org/apis/security/n
 
 Les secrets sont lus depuis des constantes ou variables d'environnement. Ils ne sont ni stockes en base ni inclus dans les journaux. Le meme adaptateur alimente la verification du telephone, les OTP et le MFA SMS.
 
+### Ou placer les cles API
+
+Le provider se choisit dans `Identity Kit > Overview > SMS provider`. Les secrets se placent dans `wp-config.php`, avant la ligne `/* That's all, stop editing! */`, ou dans les variables d'environnement du conteneur PHP.
+
+```php
+// Brevo SMS.
+define( 'IDENTITY_SECURITY_BREVO_API_KEY', 'xkeysib-...' );
+define( 'IDENTITY_SECURITY_BREVO_SMS_SENDER', 'PhotoVault' );
+
+// Ou Twilio.
+define( 'IDENTITY_SECURITY_TWILIO_ACCOUNT_SID', 'AC...' );
+define( 'IDENTITY_SECURITY_TWILIO_AUTH_TOKEN', '...' );
+define( 'IDENTITY_SECURITY_TWILIO_FROM', '+12025550123' );
+```
+
+Ne committer aucune valeur reelle. L'administration indique si les constantes attendues pour le provider selectionne sont detectees.
+
+## Integration dans un autre theme
+
+Le plugin fonctionne sans PhotoVault. Un theme peut personnaliser les routes avec `identity_security_kit_routes`, la cle meta avatar avec `identity_security_kit_avatar_meta_key` et les politiques MFA avec les filtres publics listes plus haut. Le challenge MFA dispose de son propre style responsive dans `assets/css/mfa-login.css`; un projet hote peut surcharger ses variables CSS `--isk-login-*`.
+
+La page d'administration `Identity Kit > Security audit` requiert `identity_view_security_audit`. Elle accepte les filtres statut, evenement exact et identifiant utilisateur, et n'affiche que le contexte deja nettoye par le journaliseur.
+
 ## Verification minimale
 
 1. Activer le plugin et verifier les tables DB.
@@ -141,7 +165,7 @@ Les secrets sont lus depuis des constantes ou variables d'environnement. Ils ne 
 4. Confirmer que les reglages restent bornes avec des valeurs POST extremes.
 5. Verifier que l'audit ne stocke pas mot de passe, reset key, token brut ou IP brute.
 6. Executer `php tests/run.php`, `php tests/otp.php` et `php tests/sms-provider.php`.
-7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA, cycle de vie des facteurs, rappels et grace 15 jours.
+7. Executer `wp eval-file tests/runtime-identity.php` dans WordPress pour verifier email, telephone, OTP, TOTP, recovery, login MFA, redirections vides/locales, pagination de l'audit, cycle de vie des facteurs, rappels et grace 15 jours.
 8. Confirmer dans Mailpit la remise SMTP des emails de verification, OTP et notifications de securite.
 9. Avec un provider SMS de staging, verifier livraison, refus, timeout et idempotence sans journaliser le code ou le numero complet.
 10. Executer `wp eval-file tests/runtime-email-change.php` pour verifier re-authentification, stockage chiffre, expiration, anti-rejeu et revocation des anciennes preuves.
@@ -151,8 +175,6 @@ Les secrets sont lus depuis des constantes ou variables d'environnement. Ils ne 
 
 ## Reste majeur
 
-- Validation des plans de numerotation par une librairie reconnue et UX pays/indicatif.
-- Remplacement guide des facteurs et validation des changements concurrents en navigateur.
 - Provider SMS reel valide en staging/production; les tests actuels utilisent l'adaptateur generique controle.
 - Cas multisite et changement direct des capabilities d'un role hors API utilisateur.
 - Tests navigateur du login natif et matrice d'autorisation wp-admin/AJAX.

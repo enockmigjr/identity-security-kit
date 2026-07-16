@@ -31,6 +31,15 @@ function identity_security_kit_register_admin_menu() {
 		'identity-security-kit',
 		'identity_security_kit_render_admin_page'
 	);
+
+	add_submenu_page(
+		'identity-security-kit',
+		__( 'Security audit', 'identity-security-kit' ),
+		__( 'Security audit', 'identity-security-kit' ),
+		'identity_view_security_audit',
+		'identity-security-kit-audit',
+		'identity_security_kit_render_audit_page'
+	);
 }
 add_action( 'admin_menu', 'identity_security_kit_register_admin_menu' );
 
@@ -97,6 +106,7 @@ function identity_security_kit_render_admin_page() {
 	}
 
 	$settings       = identity_security_kit_get_settings();
+	$sms_ready      = function_exists( 'identity_security_kit_is_sms_provider_available' ) && identity_security_kit_is_sms_provider_available( $settings['sms_provider'] );
 	$users_count    = count_users();
 	$total_users    = isset( $users_count['total_users'] ) ? (int) $users_count['total_users'] : 0;
 	$avatar_count   = identity_security_kit_count_profile_avatars();
@@ -186,7 +196,7 @@ function identity_security_kit_render_admin_page() {
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_provider"><?php esc_html_e( 'SMS provider', 'identity-security-kit' ); ?></label></th>
-							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="brevo" <?php selected( $settings['sms_provider'], 'brevo' ); ?>><?php esc_html_e( 'Brevo SMS (recommended)', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p class="description"><?php esc_html_e( 'Brevo uses IDENTITY_SECURITY_BREVO_API_KEY and IDENTITY_SECURITY_BREVO_SMS_SENDER. Twilio and custom adapters remain available. Secrets are never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
+							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="brevo" <?php selected( $settings['sms_provider'], 'brevo' ); ?>><?php esc_html_e( 'Brevo SMS (recommended)', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p><strong class="<?php echo $sms_ready ? 'isk-config-ready' : 'isk-config-missing'; ?>"><?php echo esc_html( $sms_ready ? __( 'Provider credentials detected.', 'identity-security-kit' ) : __( 'Provider credentials not detected.', 'identity-security-kit' ) ); ?></strong></p><p class="description"><?php esc_html_e( 'Choose the provider here, then define its secrets in wp-config.php or environment variables. Brevo: IDENTITY_SECURITY_BREVO_API_KEY and IDENTITY_SECURITY_BREVO_SMS_SENDER. Twilio: IDENTITY_SECURITY_TWILIO_ACCOUNT_SID, IDENTITY_SECURITY_TWILIO_AUTH_TOKEN and IDENTITY_SECURITY_TWILIO_FROM. Secrets are never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_otp_ttl_minutes"><?php esc_html_e( 'SMS OTP policy', 'identity-security-kit' ); ?></label></th>
@@ -277,7 +287,7 @@ function identity_security_kit_render_admin_page() {
 
 			<?php if ( current_user_can( 'identity_view_security_audit' ) ) : ?>
 				<section class="isk-panel isk-audit-panel">
-					<h2><?php esc_html_e( 'Recent security audit', 'identity-security-kit' ); ?></h2>
+					<div class="isk-panel-heading"><div><h2><?php esc_html_e( 'Recent security audit', 'identity-security-kit' ); ?></h2><p><?php esc_html_e( 'The latest 12 events are shown here.', 'identity-security-kit' ); ?></p></div><a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=identity-security-kit-audit' ) ); ?>"><?php esc_html_e( 'View complete audit', 'identity-security-kit' ); ?></a></div>
 					<table class="widefat fixed striped">
 						<thead>
 							<tr>
@@ -313,7 +323,7 @@ function identity_security_kit_render_admin_page() {
 		</div>
 	</div>
 	<style>
-		.identity-security-kit-admin .isk-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.identity-security-kit-admin .isk-card,.identity-security-kit-admin .isk-panel{background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:16px}.identity-security-kit-admin .isk-card span{display:block;color:#646970;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.identity-security-kit-admin .isk-card strong{display:block;margin-top:8px;font-size:28px}.identity-security-kit-admin .isk-card em{display:block;margin-top:4px;color:#646970;font-style:normal}.identity-security-kit-admin .isk-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px}.identity-security-kit-admin .isk-audit-panel{grid-column:1/-1}.identity-security-kit-admin .isk-list{margin-left:0}.identity-security-kit-admin .isk-list li{border-bottom:1px solid #f0f0f1;margin:0;padding:8px 0}@media(max-width:1100px){.identity-security-kit-admin .isk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:782px){.identity-security-kit-admin .isk-grid,.identity-security-kit-admin .isk-layout{grid-template-columns:1fr}}
+		.identity-security-kit-admin .isk-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.identity-security-kit-admin .isk-card,.identity-security-kit-admin .isk-panel{background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:16px}.identity-security-kit-admin .isk-card span{display:block;color:#646970;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.identity-security-kit-admin .isk-card strong{display:block;margin-top:8px;font-size:28px}.identity-security-kit-admin .isk-card em{display:block;margin-top:4px;color:#646970;font-style:normal}.identity-security-kit-admin .isk-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px}.identity-security-kit-admin .isk-audit-panel{grid-column:1/-1}.identity-security-kit-admin .isk-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.identity-security-kit-admin .isk-panel-heading h2,.identity-security-kit-admin .isk-panel-heading p{margin-top:0}.identity-security-kit-admin .isk-config-ready{color:#008a20}.identity-security-kit-admin .isk-config-missing{color:#b32d2e}.identity-security-kit-admin .isk-list{margin-left:0}.identity-security-kit-admin .isk-list li{border-bottom:1px solid #f0f0f1;margin:0;padding:8px 0}@media(max-width:1100px){.identity-security-kit-admin .isk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:782px){.identity-security-kit-admin .isk-grid,.identity-security-kit-admin .isk-layout{grid-template-columns:1fr}.identity-security-kit-admin .isk-panel-heading{display:block}.identity-security-kit-admin .isk-panel-heading .button{margin-top:8px}}
 	</style>
 	<?php
 }

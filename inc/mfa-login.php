@@ -22,10 +22,14 @@ function identity_security_kit_get_login_mfa_methods( $user_id ) {
 
 /** Persist the serializable portion of a login challenge. */
 function identity_security_kit_store_login_challenge_payload( $token_hash, $payload ) {
+	$redirect_to = wp_validate_redirect( $payload['redirect_to'] ?? '', home_url( '/' ) );
+	if ( '' === $redirect_to ) {
+		$redirect_to = home_url( '/' );
+	}
 	$stored = array(
 		'user_id'          => absint( $payload['user_id'] ?? 0 ),
 		'remember'         => ! empty( $payload['remember'] ),
-		'redirect_to'      => wp_validate_redirect( $payload['redirect_to'] ?? '', home_url( '/' ) ),
+		'redirect_to'      => $redirect_to,
 		'fingerprint'      => (string) ( $payload['fingerprint'] ?? '' ),
 		'expires_at'       => absint( $payload['expires_at'] ?? 0 ),
 		'methods'          => array_values( array_map( 'sanitize_key', $payload['methods'] ?? array() ) ),
@@ -60,11 +64,13 @@ function identity_security_kit_create_login_challenge( $user_id, $remember = fal
 	if ( preg_match( '/^[a-f0-9]{64}$/', $old_hash ) ) {
 		delete_transient( 'isk_login_' . $old_hash );
 	}
-	$preferred = identity_security_kit_get_preferred_mfa_method( $user_id );
+	$preferred       = identity_security_kit_get_preferred_mfa_method( $user_id );
+	$safe_redirect   = wp_validate_redirect( $redirect_to, home_url( '/' ) );
+	$safe_redirect   = '' !== $safe_redirect ? $safe_redirect : home_url( '/' );
 	$payload   = array(
 		'user_id'          => $user_id,
 		'remember'         => (bool) $remember,
-		'redirect_to'      => wp_validate_redirect( $redirect_to, home_url( '/' ) ),
+		'redirect_to'      => $safe_redirect,
 		'fingerprint'      => identity_security_kit_get_rate_limit_fingerprint(),
 		'expires_at'       => time() + ( 5 * MINUTE_IN_SECONDS ),
 		'methods'          => $methods,
@@ -234,7 +240,9 @@ function identity_security_kit_handle_native_mfa_login() {
 				wp_set_current_user( $user->ID );
 				wp_set_auth_cookie( $user->ID, ! empty( $result['remember'] ), is_ssl() );
 				do_action( 'wp_login', $user->user_login, $user );
-				wp_safe_redirect( wp_validate_redirect( $result['redirect_to'], admin_url() ) );
+				$destination = identity_security_kit_get_login_redirect( $user, $result['redirect_to'] );
+				identity_security_kit_log_event( 'mfa_login_redirect', 'success', $user->ID, array( 'destination_path' => (string) wp_parse_url( $destination, PHP_URL_PATH ) ) );
+				wp_safe_redirect( $destination, 303 );
 				exit;
 			}
 		}
@@ -249,12 +257,13 @@ function identity_security_kit_handle_native_mfa_login() {
 		$remote = in_array( $selected, array( 'email', 'sms' ), true );
 		$sent   = $remote && ! empty( $challenge['otp_challenge_id'] );
 		?>
+		<div class="isk-login-intro"><span><?php esc_html_e( 'Account protection', 'identity-security-kit' ); ?></span><h2><?php esc_html_e( 'Confirm that it is really you', 'identity-security-kit' ); ?></h2><p><?php esc_html_e( 'Choose an available verification method, then enter the security code to continue to your original destination.', 'identity-security-kit' ); ?></p></div>
 		<form name="identity-security-mfa" id="identity-security-mfa" action="<?php echo esc_url( add_query_arg( 'action', 'identity_security_mfa', wp_login_url() ) ); ?>" method="post">
-			<fieldset><legend><?php esc_html_e( 'Verification method', 'identity-security-kit' ); ?></legend>
+			<fieldset><legend><?php esc_html_e( 'Verification method', 'identity-security-kit' ); ?></legend><div class="isk-login-methods">
 			<?php foreach ( $challenge['methods'] as $method ) : ?>
-				<label style="display:block;margin:.75rem 0"><input type="radio" name="mfa_method" value="<?php echo esc_attr( $method ); ?>" <?php checked( $selected, $method ); ?>> <?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?><?php $destination = identity_security_kit_get_masked_mfa_destination( $challenge['user']->ID, $method ); ?><?php if ( $destination ) : ?> <small><?php echo esc_html( $destination ); ?></small><?php endif; ?></label>
+				<label class="isk-login-method"><input type="radio" name="mfa_method" value="<?php echo esc_attr( $method ); ?>" <?php checked( $selected, $method ); ?>><span><strong><?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?></strong><?php $destination = identity_security_kit_get_masked_mfa_destination( $challenge['user']->ID, $method ); ?><?php if ( $destination ) : ?><small><?php echo esc_html( $destination ); ?></small><?php endif; ?></span></label>
 			<?php endforeach; ?>
-			</fieldset>
+			</div></fieldset>
 			<p><label for="mfa_code"><?php esc_html_e( 'Security code', 'identity-security-kit' ); ?><br><input type="text" name="mfa_code" id="mfa_code" class="input" autocomplete="one-time-code"></label></p>
 			<input type="hidden" name="token" value="<?php echo esc_attr( $token ); ?>">
 			<?php wp_nonce_field( 'identity_security_mfa_login_' . $token ); ?>
@@ -267,3 +276,19 @@ function identity_security_kit_handle_native_mfa_login() {
 	exit;
 }
 add_action( 'login_form_identity_security_mfa', 'identity_security_kit_handle_native_mfa_login' );
+
+/** Load the self-contained MFA login presentation only for this login action. */
+function identity_security_kit_enqueue_mfa_login_assets() {
+	$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+	if ( 'identity_security_mfa' !== $action ) {
+		return;
+	}
+
+	wp_enqueue_style(
+		'identity-security-kit-mfa-login',
+		IDENTITY_SECURITY_KIT_URL . 'assets/css/mfa-login.css',
+		array( 'login' ),
+		IDENTITY_SECURITY_KIT_VERSION
+	);
+}
+add_action( 'login_enqueue_scripts', 'identity_security_kit_enqueue_mfa_login_assets' );

@@ -110,8 +110,8 @@ function identity_security_kit_render_mfa_channels_panel() {
 		<?php endif; ?>
 
 		<?php if ( count( $enabled ) > 1 ) : ?>
-			<article class="identity-security-mfa-method" data-mfa-method="preferred">
-				<div class="identity-security-mfa-method__header"><div><h4><?php esc_html_e( 'Preferred verification method', 'identity-security-kit' ); ?></h4><p><?php echo esc_html( identity_security_kit_get_mfa_method_label( $preferred ) ); ?></p></div></div>
+			<details class="identity-security-mfa-method identity-security-mfa-method--collapsible" data-mfa-method="preferred">
+				<summary class="identity-security-mfa-method__header"><div><h4><?php esc_html_e( 'Preferred verification method', 'identity-security-kit' ); ?></h4><p><?php echo esc_html( identity_security_kit_get_mfa_method_label( $preferred ) ); ?></p></div><span class="identity-security-mfa-disclosure" aria-hidden="true">+</span></summary>
 				<div class="identity-security-mfa-method__body">
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="identity_security_kit_mfa_preference">
@@ -121,7 +121,7 @@ function identity_security_kit_render_mfa_channels_panel() {
 					<button type="submit"><?php esc_html_e( 'Save preference', 'identity-security-kit' ); ?></button>
 				</form>
 				</div>
-			</article>
+			</details>
 		<?php endif; ?>
 	</section>
 	<?php

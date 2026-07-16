@@ -59,8 +59,14 @@ function identity_security_kit_get_route_url( $key ) {
 function identity_security_kit_get_login_redirect( $user, $requested_redirect = '' ) {
 	$redirect_key = user_can( $user, 'photovault_manage_media' ) || user_can( $user, 'manage_options' ) ? 'dashboard' : 'after_login';
 	$fallback     = identity_security_kit_get_route_url( $redirect_key );
+	$requested    = is_scalar( $requested_redirect ) ? trim( (string) $requested_redirect ) : '';
+	if ( '' === $requested ) {
+		return $fallback;
+	}
 
-	return wp_validate_redirect( is_scalar( $requested_redirect ) ? (string) $requested_redirect : '', $fallback );
+	$validated = wp_validate_redirect( $requested, $fallback );
+
+	return '' !== $validated ? $validated : $fallback;
 }
 
 /**
@@ -442,7 +448,10 @@ function identity_security_kit_update_profile_avatar( $user_id ) {
 		'profile_avatar',
 		0,
 		array(),
-		array( 'mimes' => identity_security_kit_get_allowed_image_mimes() )
+		array(
+			'mimes'     => identity_security_kit_get_allowed_image_mimes(),
+			'test_form' => false,
+		)
 	);
 	if ( is_wp_error( $attachment_id ) ) {
 		identity_security_kit_log_event( 'profile_avatar_failed', 'failure', $user_id, array( 'reason' => $attachment_id->get_error_code() ) );
@@ -652,7 +661,10 @@ function identity_security_kit_handle_profile_update() {
 			'profile_avatar',
 			0,
 			array(),
-			array( 'mimes' => identity_security_kit_get_allowed_image_mimes() )
+			array(
+				'mimes'     => identity_security_kit_get_allowed_image_mimes(),
+				'test_form' => false,
+			)
 		);
 
 		if ( is_wp_error( $attachment_id ) ) {

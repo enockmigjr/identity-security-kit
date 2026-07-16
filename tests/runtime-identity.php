@@ -120,7 +120,16 @@ try {
 	$booking_redirect = home_url( '/booking/?type=portrait' );
 	identity_runtime_assert( $booking_redirect === identity_security_kit_get_login_redirect( $runtime_user, $booking_redirect ), 'A valid local post-login destination was not preserved.' );
 	$default_redirect_key = user_can( $runtime_user, 'photovault_manage_media' ) || user_can( $runtime_user, 'manage_options' ) ? 'dashboard' : 'after_login';
+	identity_runtime_assert( identity_security_kit_get_route_url( $default_redirect_key ) === identity_security_kit_get_login_redirect( $runtime_user, '' ), 'An empty post-login destination did not use the role-aware fallback.' );
 	identity_runtime_assert( identity_security_kit_get_route_url( $default_redirect_key ) === identity_security_kit_get_login_redirect( $runtime_user, 'https://attacker.example/redirect' ), 'An external post-login redirect was accepted.' );
+	for ( $audit_index = 1; $audit_index <= 31; $audit_index++ ) {
+		identity_security_kit_log_event( 'runtime_pagination_event', 0 === $audit_index % 2 ? 'success' : 'warning', $user_id, array( 'sequence' => $audit_index ) );
+	}
+	$audit_page_one = identity_security_kit_get_audit_events( array( 'user_id' => $user_id, 'event' => 'runtime_pagination_event', 'per_page' => 25, 'paged' => 1 ) );
+	$audit_page_two = identity_security_kit_get_audit_events( array( 'user_id' => $user_id, 'event' => 'runtime_pagination_event', 'per_page' => 25, 'paged' => 2 ) );
+	$audit_success  = identity_security_kit_count_filtered_audit_events( array( 'user_id' => $user_id, 'event' => 'runtime_pagination_event', 'status' => 'success' ) );
+	identity_runtime_assert( 25 === count( $audit_page_one ) && 6 === count( $audit_page_two ), 'Security audit pagination did not expose every event.' );
+	identity_runtime_assert( 15 === $audit_success, 'Security audit filters returned an incorrect count.' );
 	identity_runtime_assert( identity_security_kit_user_requires_mfa( $user_id ), 'The privileged test role is not subject to MFA policy.' );
 	$deadline = identity_security_kit_get_mfa_deadline( $user_id );
 	identity_runtime_assert( $deadline >= time() + ( 14 * DAY_IN_SECONDS ) && $deadline <= time() + ( 16 * DAY_IN_SECONDS ), 'The configured 15-day grace deadline is invalid.' );
@@ -326,6 +335,7 @@ try {
 			'mfa_grace_days'     => 15,
 			'mfa_reminders'      => array( 1, 7, 12 ),
 			'login_redirect'     => 'local_preserved_external_rejected',
+			'audit_pagination'   => '31_events_across_two_pages_with_filters',
 		)
 	);
 } finally {
