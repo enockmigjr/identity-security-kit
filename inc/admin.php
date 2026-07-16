@@ -106,7 +106,7 @@ function identity_security_kit_render_admin_page() {
 	}
 
 	$settings       = identity_security_kit_get_settings();
-	$sms_ready      = function_exists( 'identity_security_kit_is_sms_provider_available' ) && identity_security_kit_is_sms_provider_available( $settings['sms_provider'] );
+	$sms_ready      = function_exists( 'identity_security_kit_sms_provider_available' ) && identity_security_kit_sms_provider_available();
 	$users_count    = count_users();
 	$total_users    = isset( $users_count['total_users'] ) ? (int) $users_count['total_users'] : 0;
 	$avatar_count   = identity_security_kit_count_profile_avatars();
@@ -114,6 +114,8 @@ function identity_security_kit_render_admin_page() {
 	$pending_count  = function_exists( 'identity_security_kit_email_pending_meta_key' ) ? identity_security_kit_count_users_by_meta_flag( identity_security_kit_email_pending_meta_key(), '1' ) : 0;
 	$capabilities   = identity_security_kit_get_capabilities();
 	$settings_saved = isset( $_GET['settings-updated'] ) && 'true' === sanitize_text_field( wp_unslash( $_GET['settings-updated'] ) );
+	$sms_test       = isset( $_GET['sms-test'] ) ? sanitize_key( wp_unslash( $_GET['sms-test'] ) ) : '';
+	$sms_test_code  = isset( $_GET['sms-test-code'] ) ? sanitize_key( wp_unslash( $_GET['sms-test-code'] ) ) : '';
 	$audit_count    = function_exists( 'identity_security_kit_count_audit_events' ) ? identity_security_kit_count_audit_events() : 0;
 	$audit_events   = function_exists( 'identity_security_kit_get_recent_audit_events' ) ? identity_security_kit_get_recent_audit_events( 12 ) : array();
 	?>
@@ -123,6 +125,11 @@ function identity_security_kit_render_admin_page() {
 
 		<?php if ( $settings_saved ) : ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Identity settings saved.', 'identity-security-kit' ); ?></p></div>
+		<?php endif; ?>
+		<?php if ( 'sent' === $sms_test ) : ?>
+			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'The provider accepted the test SMS. Confirm its arrival on the destination phone.', 'identity-security-kit' ); ?></p></div>
+		<?php elseif ( 'failed' === $sms_test ) : ?>
+			<div class="notice notice-error is-dismissible"><p><?php echo esc_html( sprintf( __( 'The test SMS was not accepted (%s). Check the provider configuration and logs.', 'identity-security-kit' ), $sms_test_code ?: 'sms_test_failed' ) ); ?></p></div>
 		<?php endif; ?>
 
 		<div class="isk-grid">
@@ -196,7 +203,7 @@ function identity_security_kit_render_admin_page() {
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_provider"><?php esc_html_e( 'SMS provider', 'identity-security-kit' ); ?></label></th>
-							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="brevo" <?php selected( $settings['sms_provider'], 'brevo' ); ?>><?php esc_html_e( 'Brevo SMS (recommended)', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p><strong class="<?php echo $sms_ready ? 'isk-config-ready' : 'isk-config-missing'; ?>"><?php echo esc_html( $sms_ready ? __( 'Provider credentials detected.', 'identity-security-kit' ) : __( 'Provider credentials not detected.', 'identity-security-kit' ) ); ?></strong></p><p class="description"><?php esc_html_e( 'Choose the provider here, then define its secrets in wp-config.php or environment variables. Brevo: IDENTITY_SECURITY_BREVO_API_KEY and IDENTITY_SECURITY_BREVO_SMS_SENDER. Twilio: IDENTITY_SECURITY_TWILIO_ACCOUNT_SID, IDENTITY_SECURITY_TWILIO_AUTH_TOKEN and IDENTITY_SECURITY_TWILIO_FROM. Secrets are never stored in WordPress.', 'identity-security-kit' ); ?></p></td>
+							<td><select id="isk_sms_provider" name="sms_provider"><option value="disabled" <?php selected( $settings['sms_provider'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'identity-security-kit' ); ?></option><option value="brevo" <?php selected( $settings['sms_provider'], 'brevo' ); ?>><?php esc_html_e( 'Brevo SMS (recommended)', 'identity-security-kit' ); ?></option><option value="twilio" <?php selected( $settings['sms_provider'], 'twilio' ); ?>>Twilio</option><option value="custom" <?php selected( $settings['sms_provider'], 'custom' ); ?>><?php esc_html_e( 'Custom adapter', 'identity-security-kit' ); ?></option></select><p><strong class="<?php echo $sms_ready ? 'isk-config-ready' : 'isk-config-missing'; ?>"><?php echo esc_html( $sms_ready ? __( 'Provider credentials detected.', 'identity-security-kit' ) : __( 'Provider credentials not detected.', 'identity-security-kit' ) ); ?></strong></p><p class="description"><?php esc_html_e( 'Choose the provider here, then define its secrets in wp-config.php or environment variables. Secrets are never stored in WordPress.', 'identity-security-kit' ); ?></p><details class="isk-config-help"><summary><?php esc_html_e( 'Show wp-config.php examples', 'identity-security-kit' ); ?></summary><pre><?php echo esc_html( "// Brevo\ndefine( 'IDENTITY_SECURITY_BREVO_API_KEY', 'your-server-side-key' );\ndefine( 'IDENTITY_SECURITY_BREVO_SMS_SENDER', 'PhotoVault' );\n\n// Twilio\ndefine( 'IDENTITY_SECURITY_TWILIO_ACCOUNT_SID', 'AC...' );\ndefine( 'IDENTITY_SECURITY_TWILIO_AUTH_TOKEN', 'your-server-side-token' );\ndefine( 'IDENTITY_SECURITY_TWILIO_FROM', '+12025550123' );" ); ?></pre></details></td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="isk_sms_otp_ttl_minutes"><?php esc_html_e( 'SMS OTP policy', 'identity-security-kit' ); ?></label></th>
@@ -285,6 +292,19 @@ function identity_security_kit_render_admin_page() {
 				</ul>
 			</section>
 
+			<section class="isk-panel">
+				<h2><?php esc_html_e( 'SMS provider test', 'identity-security-kit' ); ?></h2>
+				<p><?php esc_html_e( 'Send one harmless transactional message through the selected production adapter. Provider charges may apply.', 'identity-security-kit' ); ?></p>
+				<form method="POST" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="identity_security_kit_test_sms_provider">
+					<?php wp_nonce_field( 'identity_security_kit_test_sms_provider' ); ?>
+					<label for="isk_sms_test_phone"><strong><?php esc_html_e( 'Destination phone', 'identity-security-kit' ); ?></strong></label>
+					<p><input id="isk_sms_test_phone" class="regular-text" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+229..." required></p>
+					<p class="description"><?php esc_html_e( 'Use an international E.164 number. The complete number is not written to the security audit.', 'identity-security-kit' ); ?></p>
+					<?php submit_button( __( 'Send test SMS', 'identity-security-kit' ), 'secondary', 'submit', false, $sms_ready ? array() : array( 'disabled' => 'disabled' ) ); ?>
+				</form>
+			</section>
+
 			<?php if ( current_user_can( 'identity_view_security_audit' ) ) : ?>
 				<section class="isk-panel isk-audit-panel">
 					<div class="isk-panel-heading"><div><h2><?php esc_html_e( 'Recent security audit', 'identity-security-kit' ); ?></h2><p><?php esc_html_e( 'The latest 12 events are shown here.', 'identity-security-kit' ); ?></p></div><a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=identity-security-kit-audit' ) ); ?>"><?php esc_html_e( 'View complete audit', 'identity-security-kit' ); ?></a></div>
@@ -323,7 +343,7 @@ function identity_security_kit_render_admin_page() {
 		</div>
 	</div>
 	<style>
-		.identity-security-kit-admin .isk-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.identity-security-kit-admin .isk-card,.identity-security-kit-admin .isk-panel{background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:16px}.identity-security-kit-admin .isk-card span{display:block;color:#646970;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.identity-security-kit-admin .isk-card strong{display:block;margin-top:8px;font-size:28px}.identity-security-kit-admin .isk-card em{display:block;margin-top:4px;color:#646970;font-style:normal}.identity-security-kit-admin .isk-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px}.identity-security-kit-admin .isk-audit-panel{grid-column:1/-1}.identity-security-kit-admin .isk-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.identity-security-kit-admin .isk-panel-heading h2,.identity-security-kit-admin .isk-panel-heading p{margin-top:0}.identity-security-kit-admin .isk-config-ready{color:#008a20}.identity-security-kit-admin .isk-config-missing{color:#b32d2e}.identity-security-kit-admin .isk-list{margin-left:0}.identity-security-kit-admin .isk-list li{border-bottom:1px solid #f0f0f1;margin:0;padding:8px 0}@media(max-width:1100px){.identity-security-kit-admin .isk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:782px){.identity-security-kit-admin .isk-grid,.identity-security-kit-admin .isk-layout{grid-template-columns:1fr}.identity-security-kit-admin .isk-panel-heading{display:block}.identity-security-kit-admin .isk-panel-heading .button{margin-top:8px}}
+		.identity-security-kit-admin .isk-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.identity-security-kit-admin .isk-card,.identity-security-kit-admin .isk-panel{background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:16px}.identity-security-kit-admin .isk-card span{display:block;color:#646970;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.identity-security-kit-admin .isk-card strong{display:block;margin-top:8px;font-size:28px}.identity-security-kit-admin .isk-card em{display:block;margin-top:4px;color:#646970;font-style:normal}.identity-security-kit-admin .isk-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px}.identity-security-kit-admin .isk-audit-panel{grid-column:1/-1}.identity-security-kit-admin .isk-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.identity-security-kit-admin .isk-panel-heading h2,.identity-security-kit-admin .isk-panel-heading p{margin-top:0}.identity-security-kit-admin .isk-config-ready{color:#008a20}.identity-security-kit-admin .isk-config-missing{color:#b32d2e}.identity-security-kit-admin .isk-list{margin-left:0}.identity-security-kit-admin .isk-list li{border-bottom:1px solid #f0f0f1;margin:0;padding:8px 0}.identity-security-kit-admin .isk-config-help{margin-top:10px}.identity-security-kit-admin .isk-config-help summary{cursor:pointer;font-weight:600}.identity-security-kit-admin .isk-config-help pre{max-width:100%;overflow:auto;padding:12px;background:#f6f7f7;border:1px solid #dcdcde}@media(max-width:1100px){.identity-security-kit-admin .isk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:782px){.identity-security-kit-admin .isk-grid,.identity-security-kit-admin .isk-layout{grid-template-columns:1fr}.identity-security-kit-admin .isk-panel-heading{display:block}.identity-security-kit-admin .isk-panel-heading .button{margin-top:8px}}
 	</style>
 	<?php
 }
@@ -373,3 +393,54 @@ function identity_security_kit_handle_save_settings() {
 	exit;
 }
 add_action( 'admin_post_identity_security_kit_save_settings', 'identity_security_kit_handle_save_settings' );
+
+/** Send a rate-limited provider test without creating an OTP challenge. */
+function identity_security_kit_handle_test_sms_provider() {
+	if ( ! current_user_can( 'identity_manage_settings' ) ) {
+		wp_die( esc_html__( 'You are not allowed to test Identity Kit providers.', 'identity-security-kit' ) );
+	}
+
+	check_admin_referer( 'identity_security_kit_test_sms_provider' );
+	$redirect = admin_url( 'admin.php?page=identity-security-kit' );
+	$user_id  = get_current_user_id();
+	$lock_key = 'identity_sms_provider_test_' . $user_id;
+	if ( get_transient( $lock_key ) ) {
+		wp_safe_redirect( add_query_arg( array( 'sms-test' => 'failed', 'sms-test-code' => 'rate_limited' ), $redirect ) );
+		exit;
+	}
+
+	$phone = isset( $_POST['phone'] ) ? identity_security_kit_normalize_phone( wp_unslash( $_POST['phone'] ) ) : new WP_Error( 'phone_required', __( 'A destination phone is required.', 'identity-security-kit' ) );
+	if ( is_wp_error( $phone ) ) {
+		wp_safe_redirect( add_query_arg( array( 'sms-test' => 'failed', 'sms-test-code' => $phone->get_error_code() ), $redirect ) );
+		exit;
+	}
+	if ( ! identity_security_kit_sms_provider_available() ) {
+		wp_safe_redirect( add_query_arg( array( 'sms-test' => 'failed', 'sms-test-code' => 'provider_not_configured' ), $redirect ) );
+		exit;
+	}
+
+	set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
+	$result = identity_security_kit_send_sms(
+		$phone,
+		__( 'PhotoVault test SMS. Your security provider is operational.', 'identity-security-kit' ),
+		array(
+			'purpose'         => 'provider_test',
+			'idempotency_key' => wp_generate_uuid4(),
+		)
+	);
+	$code   = is_wp_error( $result ) ? $result->get_error_code() : '';
+	identity_security_kit_log_event(
+		'sms_provider_test',
+		is_wp_error( $result ) ? 'failure' : 'success',
+		$user_id,
+		array(
+			'provider'  => identity_security_kit_get_sms_provider(),
+			'recipient' => identity_security_kit_mask_phone( $phone ),
+			'reason'    => $code,
+		)
+	);
+
+	wp_safe_redirect( add_query_arg( array_filter( array( 'sms-test' => is_wp_error( $result ) ? 'failed' : 'sent', 'sms-test-code' => $code ) ), $redirect ) );
+	exit;
+}
+add_action( 'admin_post_identity_security_kit_test_sms_provider', 'identity_security_kit_handle_test_sms_provider' );

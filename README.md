@@ -149,7 +149,7 @@ define( 'IDENTITY_SECURITY_TWILIO_AUTH_TOKEN', '...' );
 define( 'IDENTITY_SECURITY_TWILIO_FROM', '+12025550123' );
 ```
 
-Ne committer aucune valeur reelle. L'administration indique si les constantes attendues pour le provider selectionne sont detectees.
+Ne committer aucune valeur reelle. L'administration indique si les constantes attendues pour le provider selectionne sont detectees. Le panneau `SMS provider test` remet un message sans OTP par le transport selectionne, limite l'action a une fois par minute et journalise seulement le provider et un numero masque.
 
 ## Integration dans un autre theme
 
