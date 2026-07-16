@@ -178,6 +178,24 @@ function identity_security_kit_filter_password_change_email( $email, $user, $use
 }
 add_filter( 'password_change_email', 'identity_security_kit_filter_password_change_email', 10, 3 );
 
+/** Render the native administrator password-reset notice with the shared layout. */
+function identity_security_kit_filter_admin_password_change_email( $email, $user, $blogname ) {
+	$content = array(
+		'preheader' => __( 'A user password was reset.', 'identity-security-kit' ),
+		'eyebrow'   => __( 'Site administration', 'identity-security-kit' ),
+		'title'     => __( 'Account password changed', 'identity-security-kit' ),
+		'intro'     => sprintf( __( 'The password was changed for the account %s.', 'identity-security-kit' ), $user instanceof WP_User ? $user->user_login : __( 'unknown', 'identity-security-kit' ) ),
+		'details'   => array( sprintf( __( 'Site: %s', 'identity-security-kit' ), wp_strip_all_tags( (string) $blogname ) ) ),
+		'notice'    => __( 'Review the security audit if this change was not expected.', 'identity-security-kit' ),
+	);
+	$email['message'] = identity_security_kit_render_email_html( $content );
+	$email['headers'] = 'Content-Type: text/html; charset=UTF-8';
+	identity_security_kit_register_next_email_alt_body( identity_security_kit_render_email_text( $content ) );
+
+	return $email;
+}
+add_filter( 'wp_password_change_notification_email', 'identity_security_kit_filter_admin_password_change_email', 10, 3 );
+
 /** Render the native WordPress recovery-mode notification with the shared layout. */
 function identity_security_kit_filter_recovery_mode_email( $email, $url ) {
 	$original_message = isset( $email['message'] ) && is_scalar( $email['message'] ) ? (string) $email['message'] : '';

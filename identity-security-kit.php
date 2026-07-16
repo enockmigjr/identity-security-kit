@@ -364,4 +364,5 @@ require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-ui.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-login.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/mfa-policy.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/auth-handlers.php';
+require_once IDENTITY_SECURITY_KIT_DIR . 'inc/password-reset.php';
 require_once IDENTITY_SECURITY_KIT_DIR . 'inc/admin.php';

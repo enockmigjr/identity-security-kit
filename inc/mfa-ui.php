@@ -17,9 +17,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 function identity_security_kit_mfa_redirect( $args ) {
 	$target = wp_get_referer();
 	if ( ! $target ) {
-		$target = admin_url( 'profile.php#identity-security-mfa' );
+		$target = admin_url( 'profile.php' );
 	}
-	wp_safe_redirect( add_query_arg( $args, $target ) );
+	$target = remove_query_arg(
+		array( 'mfa', 'recovery', 'mfa_enroll_method', 'mfa_enroll_challenge', 'mfa_disable_method', 'mfa_disable_challenge' ),
+		preg_replace( '/#.*$/', '', $target )
+	);
+	wp_safe_redirect( add_query_arg( $args, $target ) . '#identity-security-mfa' );
 	exit;
 }
 

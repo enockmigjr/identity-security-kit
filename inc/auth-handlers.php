@@ -25,6 +25,7 @@ function identity_security_kit_get_routes() {
 		'register'        => home_url( '/register/' ),
 		'profile'         => home_url( '/profile/' ),
 		'forgot_password' => home_url( '/forgot-password/' ),
+		'reset_password'  => home_url( '/reset-password/' ),
 		'dashboard'       => home_url( '/dashboard/' ),
 		'after_login'     => $gallery_url,
 	);
@@ -258,10 +259,9 @@ function identity_security_kit_handle_forgot_password() {
 		if ( is_wp_error( $key ) ) {
 			do_action( 'identity_security_kit_password_reset_failed', $key, $user->ID );
 		} else {
-			$reset_url = network_site_url(
-				'wp-login.php?action=rp&key=' . rawurlencode( $key ) . '&login=' . rawurlencode( $user->user_login ),
-				'login'
-			);
+			$reset_url = function_exists( 'identity_security_kit_get_password_reset_url' )
+				? identity_security_kit_get_password_reset_url( $user, $key )
+				: network_site_url( 'wp-login.php?action=rp&key=' . rawurlencode( $key ) . '&login=' . rawurlencode( $user->user_login ), 'login' );
 			$subject   = sprintf( __( '[%s] Password reset', 'identity-security-kit' ), wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) );
 			$name = $user->display_name ? $user->display_name : $user->user_login;
 			if ( ! identity_security_kit_send_transactional_email(
