@@ -83,6 +83,9 @@ function identity_security_kit_handle_frontend_password_reset() {
 
 	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['photovault_reset_nonce'] ) ), 'photovault_reset_action' ) ) {
 		identity_security_kit_log_event( 'password_reset_confirmation_nonce_failed', 'failure' );
+		if ( identity_security_kit_is_async_frontend_request() ) {
+			identity_security_kit_send_frontend_response( false, __( 'La verification de securite a expire. Rechargez la page.', 'identity-security-kit' ), array(), array(), 403 );
+		}
 		wp_safe_redirect( add_query_arg( 'reset', 'security_failed', $return ) );
 		exit;
 	}
@@ -93,10 +96,16 @@ function identity_security_kit_handle_frontend_password_reset() {
 		identity_security_kit_redirect( 'forgot_password', array( 'reset' => 'invalid' ) );
 	}
 	if ( strlen( $password ) < identity_security_kit_get_min_password_length() ) {
+		if ( identity_security_kit_is_async_frontend_request() ) {
+			identity_security_kit_send_frontend_response( false, __( 'Le mot de passe ne respecte pas la longueur minimale.', 'identity-security-kit' ), array(), array( 'password' => __( 'Choisissez un mot de passe plus long.', 'identity-security-kit' ) ), 422 );
+		}
 		wp_safe_redirect( add_query_arg( 'reset', 'weak_password', $return ) );
 		exit;
 	}
 	if ( ! hash_equals( $password, $confirm ) ) {
+		if ( identity_security_kit_is_async_frontend_request() ) {
+			identity_security_kit_send_frontend_response( false, __( 'Les deux mots de passe ne correspondent pas.', 'identity-security-kit' ), array(), array( 'password_confirm' => __( 'Saisissez de nouveau le meme mot de passe.', 'identity-security-kit' ) ), 422 );
+		}
 		wp_safe_redirect( add_query_arg( 'reset', 'password_mismatch', $return ) );
 		exit;
 	}

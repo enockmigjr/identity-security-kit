@@ -7,6 +7,9 @@ Les dependances Composer de production sont embarquees dans le plugin. `giggsey/
 ## Responsabilites
 
 - Gerer les formulaires frontend login/register/profile/forgot password.
+- Repondre aux soumissions frontend asynchrones avec une enveloppe JSON
+  coherente, tout en conservant les formulaires et redirections comme fallback
+  sans JavaScript.
 - Isoler les modifications de profil (identite, avatar, telephone, email et mot de passe) afin qu'une action ne valide jamais les champs d'une autre.
 - Valider les champs critiques cote serveur.
 - Eviter l'enumeration sur les demandes de reset password.
@@ -29,6 +32,15 @@ Les dependances Composer de production sont embarquees dans le plugin. `giggsey/
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
+
+## Authentification progressive
+
+Les pages de connexion, inscription, mot de passe oublie et reinitialisation
+peuvent envoyer `X-Requested-With: XMLHttpRequest`. Les handlers conservent les
+memes nonces, limites de debit, validations et journaux, mais retournent alors
+`success`, `message`, `data`, `errors` et `meta` en JSON. Une connexion MFA
+renvoie l'URL propre `/security-check/`; la selection, l'envoi et la verification
+du facteur sont ensuite effectues par les routes REST MFA.
 
 ## Capabilities
 

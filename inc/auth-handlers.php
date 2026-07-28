@@ -70,6 +70,124 @@ function identity_security_kit_get_login_redirect( $user, $requested_redirect = 
 	return '' !== $validated ? $validated : $fallback;
 }
 
+/** Detect an asynchronous frontend form submission. */
+function identity_security_kit_is_async_frontend_request() {
+	$requested_with = isset( $_SERVER['HTTP_X_REQUESTED_WITH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ) ) : '';
+
+	return 'xmlhttprequest' === strtolower( $requested_with );
+}
+
+/** Send the shared frontend response envelope and stop execution. */
+function identity_security_kit_send_frontend_response( $success, $message, $data = array(), $errors = array(), $status = 200 ) {
+	wp_send_json(
+		array(
+			'success' => (bool) $success,
+			'message' => (string) $message,
+			'data'    => is_array( $data ) ? $data : array(),
+			'errors'  => is_array( $errors ) ? $errors : array(),
+			'meta'    => array(),
+		),
+		absint( $status )
+	);
+}
+
+/** Return a human response for a legacy redirect state. */
+function identity_security_kit_get_async_redirect_state( $key, $args, $url ) {
+	$response = array(
+		'success' => true,
+		'message' => __( 'Action terminee.', 'identity-security-kit' ),
+		'data'    => array( 'redirect_url' => $url ),
+		'errors'  => array(),
+		'status'  => 200,
+	);
+
+	if ( isset( $args['login'] ) ) {
+		$rate_limited = 'rate_limited' === $args['login'];
+		return array(
+			'success' => false,
+			'message' => $rate_limited ? __( 'Trop de tentatives. Patientez avant de reessayer.', 'identity-security-kit' ) : __( 'Identifiant ou mot de passe incorrect.', 'identity-security-kit' ),
+			'data'    => array(),
+			'errors'  => $rate_limited ? array() : array( 'log' => __( 'Verifiez vos identifiants.', 'identity-security-kit' ) ),
+			'status'  => $rate_limited ? 429 : 422,
+		);
+	}
+
+	if ( isset( $args['forgot'] ) ) {
+		$code = sanitize_key( $args['forgot'] );
+		if ( 'sent' === $code ) {
+			$response['message'] = __( 'Si ce compte existe, un lien de reinitialisation vient d etre envoye.', 'identity-security-kit' );
+			$response['data']    = array();
+			return $response;
+		}
+
+		$rate_limited = 'rate_limited' === $code;
+		return array(
+			'success' => false,
+			'message' => $rate_limited ? __( 'Trop de demandes. Patientez avant de reessayer.', 'identity-security-kit' ) : __( 'Indiquez votre identifiant ou votre adresse e-mail.', 'identity-security-kit' ),
+			'data'    => array(),
+			'errors'  => 'fields_required' === $code ? array( 'user_login' => __( 'Ce champ est obligatoire.', 'identity-security-kit' ) ) : array(),
+			'status'  => $rate_limited ? 429 : 422,
+		);
+	}
+
+	if ( 'failed' === ( $args['register'] ?? '' ) ) {
+		$code     = sanitize_key( $args['err'] ?? 'failed' );
+		$messages = array(
+			'fields_required'             => __( 'Remplissez tous les champs obligatoires.', 'identity-security-kit' ),
+			'invalid_email'               => __( 'Cette adresse e-mail est invalide.', 'identity-security-kit' ),
+			'phone_required'              => __( 'Le numero de telephone est obligatoire.', 'identity-security-kit' ),
+			'phone_country_code_required' => __( 'Ajoutez le prefixe international du numero.', 'identity-security-kit' ),
+			'phone_invalid'               => __( 'Ce numero de telephone est invalide.', 'identity-security-kit' ),
+			'phone_exists'                => __( 'Ce numero est deja associe a un compte.', 'identity-security-kit' ),
+			'weak_password'               => __( 'Le mot de passe ne respecte pas la longueur minimale.', 'identity-security-kit' ),
+			'password_mismatch'           => __( 'Les deux mots de passe ne correspondent pas.', 'identity-security-kit' ),
+			'email_exists'                => __( 'Cette adresse e-mail est deja utilisee.', 'identity-security-kit' ),
+			'username_exists'             => __( 'Ce nom d utilisateur est deja utilise.', 'identity-security-kit' ),
+			'rate_limited'                => __( 'Trop de tentatives. Patientez avant de reessayer.', 'identity-security-kit' ),
+			'failed'                      => __( 'L inscription n a pas abouti.', 'identity-security-kit' ),
+		);
+		$fields   = array(
+			'invalid_email'               => 'email',
+			'email_exists'                => 'email',
+			'phone_required'              => 'phone',
+			'phone_country_code_required' => 'phone',
+			'phone_invalid'               => 'phone',
+			'phone_exists'                => 'phone',
+			'weak_password'               => 'password',
+			'password_mismatch'           => 'password_confirm',
+			'username_exists'             => 'username',
+		);
+		return array(
+			'success' => false,
+			'message' => $messages[ $code ] ?? $messages['failed'],
+			'data'    => array(),
+			'errors'  => isset( $fields[ $code ] ) ? array( $fields[ $code ] => $messages[ $code ] ) : array(),
+			'status'  => 'rate_limited' === $code ? 429 : 422,
+		);
+	}
+
+	if ( 'profile' === $key && isset( $args['verify'] ) ) {
+		$response['message'] = 'pending' === $args['verify']
+			? __( 'Compte cree. Consultez votre e-mail pour confirmer votre adresse.', 'identity-security-kit' )
+			: __( 'Compte cree. La verification e-mail pourra etre renvoyee depuis votre profil.', 'identity-security-kit' );
+	}
+	if ( 'login' === $key && 'reset' === ( $args['password'] ?? '' ) ) {
+		$response['message'] = __( 'Mot de passe modifie. Vous pouvez maintenant vous connecter.', 'identity-security-kit' );
+	}
+
+	return $response;
+}
+
+/** Redirect normally or return the equivalent asynchronous transition. */
+function identity_security_kit_complete_frontend_redirect( $url, $message ) {
+	if ( identity_security_kit_is_async_frontend_request() ) {
+		identity_security_kit_send_frontend_response( true, $message, array( 'redirect_url' => $url ) );
+	}
+
+	wp_safe_redirect( $url );
+	exit;
+}
+
 /**
  * Redirect safely to a configured route.
  *
@@ -80,6 +198,11 @@ function identity_security_kit_redirect( $key, $args = array() ) {
 	$url = identity_security_kit_get_route_url( $key );
 	if ( ! empty( $args ) ) {
 		$url = add_query_arg( $args, $url );
+	}
+
+	if ( identity_security_kit_is_async_frontend_request() ) {
+		$response = identity_security_kit_get_async_redirect_state( $key, $args, $url );
+		identity_security_kit_send_frontend_response( $response['success'], $response['message'], $response['data'], $response['errors'], $response['status'] );
 	}
 
 	wp_safe_redirect( $url );
@@ -191,6 +314,9 @@ function identity_security_kit_handle_login() {
 
 	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['photovault_login_nonce'] ) ), 'photovault_login_action' ) ) {
 		identity_security_kit_log_event( 'login_nonce_failed', 'failure' );
+		if ( identity_security_kit_is_async_frontend_request() ) {
+			identity_security_kit_send_frontend_response( false, __( 'La verification de securite a expire. Rechargez la page.', 'identity-security-kit' ), array(), array(), 403 );
+		}
 		wp_die( esc_html__( 'Security verification failed.', 'identity-security-kit' ) );
 	}
 	if ( ! identity_security_kit_rate_limit_by_setting( 'login', 'login_attempts_per_window' ) ) {
@@ -216,16 +342,14 @@ function identity_security_kit_handle_login() {
 			identity_security_kit_log_event( 'login_mfa_challenge_failed', 'failure', $user->ID, array( 'reason' => $challenge_url->get_error_code() ) );
 			identity_security_kit_redirect( 'login', array( 'login' => 'failed' ) );
 		}
-		wp_safe_redirect( $challenge_url );
-		exit;
+		identity_security_kit_complete_frontend_redirect( $challenge_url, __( 'Mot de passe valide. Verification de securite requise.', 'identity-security-kit' ) );
 	}
 
 	wp_set_current_user( $user->ID );
 	wp_set_auth_cookie( $user->ID, $remember, is_ssl() );
 	do_action( 'wp_login', $user->user_login, $user );
 	identity_security_kit_log_event( 'login_success', 'success', $user->ID );
-	wp_safe_redirect( $redirect_url );
-	exit;
+	identity_security_kit_complete_frontend_redirect( $redirect_url, __( 'Connexion reussie.', 'identity-security-kit' ) );
 }
 add_action( 'template_redirect', 'identity_security_kit_handle_login' );
 
@@ -297,6 +421,9 @@ function identity_security_kit_handle_registration() {
 
 	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['photovault_register_nonce'] ) ), 'photovault_register_action' ) ) {
 		identity_security_kit_log_event( 'registration_nonce_failed', 'failure' );
+		if ( identity_security_kit_is_async_frontend_request() ) {
+			identity_security_kit_send_frontend_response( false, __( 'La verification de securite a expire. Rechargez la page.', 'identity-security-kit' ), array(), array(), 403 );
+		}
 		wp_die( esc_html__( 'Security verification failed.', 'identity-security-kit' ) );
 	}
 	if ( ! identity_security_kit_rate_limit_by_setting( 'registration', 'registration_attempts_per_window' ) ) {
