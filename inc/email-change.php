@@ -29,11 +29,10 @@ function identity_security_kit_is_confirming_email_change( $state = null ) {
 function identity_security_kit_get_email_change_url( $user_id, $token ) {
 	return add_query_arg(
 		array(
-			'action' => 'identity_security_kit_confirm_email_change',
 			'uid'    => absint( $user_id ),
 			'token'  => rawurlencode( $token ),
 		),
-		admin_url( 'admin-post.php' )
+		home_url( '/confirm-email-change/' )
 	);
 }
 
@@ -273,6 +272,16 @@ function identity_security_kit_handle_confirm_email_change() {
 }
 add_action( 'admin_post_nopriv_identity_security_kit_confirm_email_change', 'identity_security_kit_handle_confirm_email_change' );
 add_action( 'admin_post_identity_security_kit_confirm_email_change', 'identity_security_kit_handle_confirm_email_change' );
+
+/** Dispatch the clean public email-change confirmation URL. */
+function identity_security_kit_dispatch_email_change_url() {
+	$request_path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+	$target_path  = wp_parse_url( home_url( '/confirm-email-change/' ), PHP_URL_PATH );
+	if ( untrailingslashit( (string) $request_path ) === untrailingslashit( (string) $target_path ) ) {
+		identity_security_kit_handle_confirm_email_change();
+	}
+}
+add_action( 'template_redirect', 'identity_security_kit_dispatch_email_change_url', 0 );
 
 /** Cancel the authenticated user's pending email change. */
 function identity_security_kit_handle_cancel_email_change() {
