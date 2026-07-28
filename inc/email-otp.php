@@ -102,11 +102,11 @@ function identity_security_kit_render_email_otp_shortcode( $attributes ) {
 	ob_start();
 	if ( $challenge_id ) :
 		?>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_email_otp_verify"><input type="hidden" name="challenge_id" value="<?php echo esc_attr( $challenge_id ); ?>"><input type="hidden" name="purpose" value="<?php echo esc_attr( $purpose ); ?>"><?php wp_nonce_field( 'identity_security_kit_email_otp_verify_' . $purpose ); ?><label><?php esc_html_e( 'Security code', 'identity-security-kit' ); ?> <input name="otp_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" required></label><button type="submit"><?php esc_html_e( 'Verify code', 'identity-security-kit' ); ?></button></form>
+		<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>"><input type="hidden" name="action" value="identity_security_kit_email_otp_verify"><input type="hidden" name="challenge_id" value="<?php echo esc_attr( $challenge_id ); ?>"><input type="hidden" name="purpose" value="<?php echo esc_attr( $purpose ); ?>"><?php wp_nonce_field( 'identity_security_kit_email_otp_verify_' . $purpose ); ?><label><?php esc_html_e( 'Security code', 'identity-security-kit' ); ?> <input name="otp_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" required></label><button type="submit"><?php esc_html_e( 'Verify code', 'identity-security-kit' ); ?></button></form>
 		<?php
 	else :
 		?>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="identity_security_kit_email_otp_request"><input type="hidden" name="purpose" value="<?php echo esc_attr( $purpose ); ?>"><?php wp_nonce_field( 'identity_security_kit_email_otp_request_' . $purpose ); ?><button type="submit"><?php esc_html_e( 'Send a security code by email', 'identity-security-kit' ); ?></button></form>
+		<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>"><input type="hidden" name="action" value="identity_security_kit_email_otp_request"><input type="hidden" name="purpose" value="<?php echo esc_attr( $purpose ); ?>"><?php wp_nonce_field( 'identity_security_kit_email_otp_request_' . $purpose ); ?><button type="submit"><?php esc_html_e( 'Send a security code by email', 'identity-security-kit' ); ?></button></form>
 		<?php
 	endif;
 

@@ -15,7 +15,7 @@ function identity_security_kit_render_remote_factor_enrollment( $user_id, $metho
 		ob_start();
 		?>
 		<?php if ( $method === $disable_method && $disable_challenge_id ) : ?>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>">
 				<input type="hidden" name="action" value="identity_security_kit_channel_mfa_disable_confirm">
 				<input type="hidden" name="mfa_method" value="<?php echo esc_attr( $method ); ?>">
 				<input type="hidden" name="challenge_id" value="<?php echo esc_attr( $disable_challenge_id ); ?>">
@@ -25,7 +25,7 @@ function identity_security_kit_render_remote_factor_enrollment( $user_id, $metho
 			</form>
 		<?php else : ?>
 			<details><summary><?php echo esc_html( sprintf( __( 'Disable %s', 'identity-security-kit' ), identity_security_kit_get_mfa_method_label( $method ) ) ); ?></summary>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>">
 					<input type="hidden" name="action" value="identity_security_kit_channel_mfa_disable_start">
 					<input type="hidden" name="mfa_method" value="<?php echo esc_attr( $method ); ?>">
 					<?php wp_nonce_field( 'identity_security_kit_channel_mfa_disable_start' ); ?>
@@ -40,7 +40,7 @@ function identity_security_kit_render_remote_factor_enrollment( $user_id, $metho
 	if ( $method === $challenge_method && $challenge_id ) {
 		ob_start();
 		?>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>">
 			<input type="hidden" name="action" value="identity_security_kit_channel_mfa_confirm">
 			<input type="hidden" name="mfa_method" value="<?php echo esc_attr( $method ); ?>">
 			<input type="hidden" name="challenge_id" value="<?php echo esc_attr( $challenge_id ); ?>">
@@ -55,7 +55,7 @@ function identity_security_kit_render_remote_factor_enrollment( $user_id, $metho
 	ob_start();
 	?>
 	<details><summary><?php echo esc_html( sprintf( __( 'Set up %s', 'identity-security-kit' ), identity_security_kit_get_mfa_method_label( $method ) ) ); ?></summary>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>">
 			<input type="hidden" name="action" value="identity_security_kit_channel_mfa_start">
 			<input type="hidden" name="mfa_method" value="<?php echo esc_attr( $method ); ?>">
 			<?php wp_nonce_field( 'identity_security_kit_channel_mfa_start' ); ?>
@@ -113,7 +113,7 @@ function identity_security_kit_render_mfa_channels_panel() {
 			<details class="identity-security-mfa-method identity-security-mfa-method--collapsible" data-mfa-method="preferred">
 				<summary class="identity-security-mfa-method__header"><div><h4><?php esc_html_e( 'Preferred verification method', 'identity-security-kit' ); ?></h4><p><?php echo esc_html( identity_security_kit_get_mfa_method_label( $preferred ) ); ?></p></div><span class="identity-security-mfa-disclosure" aria-hidden="true">+</span></summary>
 				<div class="identity-security-mfa-method__body">
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<form method="post" action="<?php echo esc_url( identity_security_kit_get_account_action_url() ); ?>">
 					<input type="hidden" name="action" value="identity_security_kit_mfa_preference">
 					<?php wp_nonce_field( 'identity_security_kit_mfa_preference' ); ?>
 					<label><?php esc_html_e( 'Method', 'identity-security-kit' ); ?><select name="mfa_method"><?php foreach ( $enabled as $method ) : ?><option value="<?php echo esc_attr( $method ); ?>" <?php selected( $preferred, $method ); ?>><?php echo esc_html( identity_security_kit_get_mfa_method_label( $method ) ); ?></option><?php endforeach; ?></select></label>

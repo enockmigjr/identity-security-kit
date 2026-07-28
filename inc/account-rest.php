@@ -9,6 +9,52 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/** Return the clean fallback endpoint for authenticated account forms. */
+function identity_security_kit_get_account_action_url() {
+	return home_url( '/account/security-action/' );
+}
+
+/** Dispatch allowlisted no-JavaScript account actions through a clean URL. */
+function identity_security_kit_dispatch_account_action_url() {
+	$request_path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+	$target_path  = wp_parse_url( identity_security_kit_get_account_action_url(), PHP_URL_PATH );
+	if ( untrailingslashit( (string) $request_path ) !== untrailingslashit( (string) $target_path ) ) {
+		return;
+	}
+	if ( 'POST' !== strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) ) {
+		status_header( 405 );
+		exit;
+	}
+
+	$action = isset( $_POST['action'] ) ? sanitize_key( wp_unslash( $_POST['action'] ) ) : '';
+	$map    = array(
+		'identity_security_kit_totp_start'                 => 'identity_security_kit_handle_totp_start',
+		'identity_security_kit_totp_confirm'               => 'identity_security_kit_handle_totp_confirm',
+		'identity_security_kit_totp_cancel'                => 'identity_security_kit_handle_totp_cancel',
+		'identity_security_kit_recovery_regenerate'        => 'identity_security_kit_handle_recovery_regenerate',
+		'identity_security_kit_totp_disable'               => 'identity_security_kit_handle_totp_disable',
+		'identity_security_kit_channel_mfa_start'          => 'identity_security_kit_handle_channel_mfa_start',
+		'identity_security_kit_channel_mfa_confirm'        => 'identity_security_kit_handle_channel_mfa_confirm',
+		'identity_security_kit_channel_mfa_disable_start'  => 'identity_security_kit_handle_channel_mfa_disable_start',
+		'identity_security_kit_channel_mfa_disable_confirm' => 'identity_security_kit_handle_channel_mfa_disable_confirm',
+		'identity_security_kit_mfa_preference'             => 'identity_security_kit_handle_mfa_preference',
+		'identity_security_kit_phone_otp_request'          => 'identity_security_kit_handle_phone_otp_request',
+		'identity_security_kit_phone_otp_verify'           => 'identity_security_kit_handle_phone_otp_verify',
+		'identity_security_kit_email_otp_request'          => 'identity_security_kit_handle_email_otp_request',
+		'identity_security_kit_email_otp_verify'           => 'identity_security_kit_handle_email_otp_verify',
+		'identity_security_kit_resend_email_verification'  => 'identity_security_kit_handle_resend_email_verification',
+		'identity_security_kit_cancel_email_change'        => 'identity_security_kit_handle_cancel_email_change',
+	);
+	if ( ! isset( $map[ $action ] ) || ! is_callable( $map[ $action ] ) ) {
+		status_header( 404 );
+		exit;
+	}
+
+	call_user_func( $map[ $action ] );
+	exit;
+}
+add_action( 'template_redirect', 'identity_security_kit_dispatch_account_action_url', 0 );
+
 /** Return a stable account API response. */
 function identity_security_kit_account_rest_response( $success, $message, $data = array(), $errors = array(), $status = 200 ) {
 	return new WP_REST_Response(
