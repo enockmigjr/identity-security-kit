@@ -509,7 +509,7 @@ function identity_security_kit_ajax_user_security_action() {
 	if ( ! $user ) {
 		wp_send_json_error( array( 'message' => __( 'User not found.', 'identity-security-kit' ) ), 404 );
 	}
-	if ( get_current_user_id() === $user_id && in_array( $action, array( 'reset_mfa', 'restart_grace' ), true ) ) {
+	if ( get_current_user_id() === $user_id && in_array( $action, array( 'reset_mfa', 'restart_grace', 'revoke_sessions' ), true ) ) {
 		wp_send_json_error( array( 'message' => __( 'Use your profile security flow for your own account.', 'identity-security-kit' ) ), 409 );
 	}
 
@@ -523,6 +523,12 @@ function identity_security_kit_ajax_user_security_action() {
 		$result  = identity_security_kit_create_email_verification_challenge( $user_id, $user->user_email );
 		$message = __( 'A new email verification link was sent.', 'identity-security-kit' );
 		identity_security_kit_log_event( is_wp_error( $result ) ? 'email_verification_admin_resend_failed' : 'email_verification_admin_resent', is_wp_error( $result ) ? 'failure' : 'success', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
+	} elseif ( 'revoke_sessions' === $action ) {
+		identity_security_kit_destroy_other_sessions( $user_id );
+		identity_security_kit_send_security_notification( $user_id, __( 'An administrator signed your account out from every active browser and device.', 'identity-security-kit' ) );
+		identity_security_kit_log_event( 'sessions_admin_revoked', 'warning', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
+		$result  = true;
+		$message = __( 'All active sessions were revoked and the user was notified.', 'identity-security-kit' );
 	} else {
 		$result  = new WP_Error( 'identity_security_action_invalid', __( 'Choose a valid security action.', 'identity-security-kit' ) );
 		$message = '';
@@ -574,6 +580,8 @@ function identity_security_kit_enqueue_user_actions( $hook_suffix ) {
 				'graceDescription'  => __( 'Start the configured enrollment window again.', 'identity-security-kit' ),
 				'verify'            => __( 'Send email verification', 'identity-security-kit' ),
 				'verifyDescription' => __( 'Send a fresh, expiring link to the account email.', 'identity-security-kit' ),
+				'revoke'            => __( 'Sign out every active session', 'identity-security-kit' ),
+				'revokeDescription' => __( 'Revoke every browser and device session for this account.', 'identity-security-kit' ),
 				'close'             => __( 'Close', 'identity-security-kit' ),
 				'confirmTitle'      => __( 'Confirm this action', 'identity-security-kit' ),
 				'confirmText'       => __( 'This security operation will be recorded in the audit log.', 'identity-security-kit' ),

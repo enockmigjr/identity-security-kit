@@ -13,6 +13,7 @@
 		'<div class="isk-user-security-dialog__actions" data-isk-actions>' +
 		'<button type="button" data-isk-action="resend_verification"><strong>' + labels.verify + '</strong><small>' + labels.verifyDescription + '</small></button>' +
 		'<button type="button" data-isk-action="restart_grace"><strong>' + labels.grace + '</strong><small>' + labels.graceDescription + '</small></button>' +
+		'<button type="button" data-isk-action="revoke_sessions"><strong>' + labels.revoke + '</strong><small>' + labels.revokeDescription + '</small></button>' +
 		'<button type="button" class="is-danger" data-isk-action="reset_mfa"><strong>' + labels.reset + '</strong><small>' + labels.resetDescription + '</small></button>' +
 		'</div>' +
 		'<div class="isk-user-security-dialog__confirmation" data-isk-confirmation hidden>' +
