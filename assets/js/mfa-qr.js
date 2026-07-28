@@ -25,6 +25,7 @@
 			target.dataset.rendered = 'true';
 		} );
 	}
+	window.IdentitySecurityRenderAuthenticatorCodes = renderAuthenticatorCodes;
 
 	if ( document.readyState === 'loading' ) {
 		document.addEventListener( 'DOMContentLoaded', renderAuthenticatorCodes );

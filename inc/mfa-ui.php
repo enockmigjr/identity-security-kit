@@ -146,6 +146,24 @@ function identity_security_kit_render_mfa_panel() {
 	if ( ! is_user_logged_in() ) {
 		return '';
 	}
+	identity_security_kit_enqueue_totp_qr_assets();
+	wp_enqueue_script(
+		'identity-security-kit-mfa-account',
+		IDENTITY_SECURITY_KIT_URL . 'assets/js/mfa-account.js',
+		array( 'identity-security-kit-mfa-qr' ),
+		IDENTITY_SECURITY_KIT_VERSION,
+		true
+	);
+	wp_localize_script(
+		'identity-security-kit-mfa-account',
+		'IdentitySecurityMfaAccount',
+		array(
+			'endpoint' => esc_url_raw( rest_url( 'identity-security-kit/v1/account/mfa' ) ),
+			'nonce'    => wp_create_nonce( 'wp_rest' ),
+			'error'    => __( 'The security operation could not be completed.', 'identity-security-kit' ),
+			'copied'   => __( 'Recovery codes copied.', 'identity-security-kit' ),
+		)
+	);
 	$user_id       = get_current_user_id();
 	$enabled       = identity_security_kit_is_totp_enabled( $user_id );
 	$pending       = identity_security_kit_get_pending_totp_secret( $user_id );
@@ -188,7 +206,7 @@ function identity_security_kit_render_mfa_panel() {
 		<h2><?php esc_html_e( 'Two-factor authentication', 'identity-security-kit' ); ?></h2>
 		<?php if ( $status && isset( $messages[ $status ] ) ) : ?><div class="notice notice-info"><p><?php echo esc_html( $messages[ $status ] ); ?></p></div><?php endif; ?>
 		<?php if ( $codes ) : ?>
-			<div class="notice notice-warning"><p><strong><?php esc_html_e( 'Save these recovery codes now. They will not be shown again.', 'identity-security-kit' ); ?></strong></p><ul><?php foreach ( $codes as $recovery_code ) : ?><li><code><?php echo esc_html( $recovery_code ); ?></code></li><?php endforeach; ?></ul></div>
+			<div class="notice notice-warning" data-isk-recovery-codes><p><strong><?php esc_html_e( 'Save these recovery codes now. They will not be shown again.', 'identity-security-kit' ); ?></strong></p><ul><?php foreach ( $codes as $recovery_code ) : ?><li><code><?php echo esc_html( $recovery_code ); ?></code></li><?php endforeach; ?></ul><button type="button" data-isk-copy-recovery><?php esc_html_e( 'Copy all codes', 'identity-security-kit' ); ?></button></div>
 		<?php endif; ?>
 		<section class="identity-security-mfa-method" data-mfa-method="totp">
 			<div class="identity-security-mfa-method__header">

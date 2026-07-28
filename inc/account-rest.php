@@ -223,6 +223,210 @@ function identity_security_kit_account_rest_update( WP_REST_Request $request ) {
 	return identity_security_kit_account_rest_error( __( 'Choose a valid account action.', 'identity-security-kit' ) );
 }
 
+/** Render the refreshed MFA panel with transient flow state. */
+function identity_security_kit_account_rest_mfa_success( $message, $view = array() ) {
+	$previous = $_GET;
+	foreach ( $view as $key => $value ) {
+		$_GET[ sanitize_key( $key ) ] = $value;
+	}
+	$html = identity_security_kit_render_mfa_panel();
+	$_GET = $previous;
+
+	return identity_security_kit_account_rest_response( true, $message, array( 'html' => $html ) );
+}
+
+/** Verify the current account password for a protected MFA transition. */
+function identity_security_kit_account_rest_mfa_password( $user_id, $params ) {
+	return identity_security_kit_account_check_password( $user_id, $params['current_password'] ?? '' );
+}
+
+/** Execute one MFA account transition without a full-page redirect. */
+function identity_security_kit_account_rest_mfa( WP_REST_Request $request ) {
+	$user_id = get_current_user_id();
+	$params  = identity_security_kit_account_rest_params( $request );
+	$action  = sanitize_key( $params['action'] ?? '' );
+	$method  = sanitize_key( $params['mfa_method'] ?? '' );
+	$code    = sanitize_text_field( $params['otp_code'] ?? $params['mfa_code'] ?? '' );
+
+	if ( 'identity_security_kit_totp_start' === $action ) {
+		$password = identity_security_kit_account_rest_mfa_password( $user_id, $params );
+		$result   = is_wp_error( $password ) ? $password : identity_security_kit_begin_totp_enrollment( $user_id );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result, 'current_password' );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'Scan the QR code, then enter the current six-digit code.', 'identity-security-kit' ),
+			array( 'mfa' => 'enrollment_started' )
+		);
+	}
+
+	if ( 'identity_security_kit_totp_confirm' === $action ) {
+		$codes = identity_security_kit_confirm_totp_enrollment( $user_id, $code );
+		if ( is_wp_error( $codes ) ) {
+			return identity_security_kit_account_rest_error( $codes, 'otp_code' );
+		}
+		$token = identity_security_kit_store_recovery_display( $user_id, $codes );
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'Authenticator verification is enabled. Save the recovery codes now.', 'identity-security-kit' ),
+			array(
+				'mfa'      => 'enabled',
+				'recovery' => is_wp_error( $token ) ? '' : $token,
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_totp_cancel' === $action ) {
+		delete_user_meta( $user_id, 'identity_mfa_totp_pending' );
+		identity_security_kit_log_event( 'totp_enrollment_cancelled', 'info', $user_id );
+		return identity_security_kit_account_rest_mfa_success( __( 'Authenticator enrollment was cancelled.', 'identity-security-kit' ), array( 'mfa' => 'cancelled' ) );
+	}
+
+	if ( 'identity_security_kit_recovery_regenerate' === $action ) {
+		$verify = identity_security_kit_verify_totp_or_recovery( $user_id, $code );
+		if ( is_wp_error( $verify ) ) {
+			return identity_security_kit_account_rest_error( $verify, 'mfa_code' );
+		}
+		$codes = identity_security_kit_generate_recovery_codes( $user_id );
+		$token = is_wp_error( $codes ) ? $codes : identity_security_kit_store_recovery_display( $user_id, $codes );
+		if ( is_wp_error( $token ) ) {
+			return identity_security_kit_account_rest_error( $token );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'New recovery codes were generated. Save them now.', 'identity-security-kit' ),
+			array(
+				'mfa'      => 'recovery_regenerated',
+				'recovery' => $token,
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_totp_disable' === $action ) {
+		$password = identity_security_kit_account_rest_mfa_password( $user_id, $params );
+		if ( is_wp_error( $password ) ) {
+			return identity_security_kit_account_rest_error( $password, 'current_password' );
+		}
+		$allowed = identity_security_kit_can_disable_mfa_method( $user_id, 'totp' );
+		if ( is_wp_error( $allowed ) ) {
+			return identity_security_kit_account_rest_error( $allowed );
+		}
+		$verify = identity_security_kit_verify_totp_or_recovery( $user_id, $code );
+		if ( is_wp_error( $verify ) ) {
+			return identity_security_kit_account_rest_error( $verify, 'mfa_code' );
+		}
+		$result = identity_security_kit_disable_mfa_method( $user_id, 'totp' );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result );
+		}
+		return identity_security_kit_account_rest_mfa_success( __( 'Authenticator verification was disabled.', 'identity-security-kit' ), array( 'mfa' => 'disabled' ) );
+	}
+
+	if ( 'identity_security_kit_channel_mfa_start' === $action ) {
+		$password = identity_security_kit_account_rest_mfa_password( $user_id, $params );
+		if ( is_wp_error( $password ) ) {
+			return identity_security_kit_account_rest_error( $password, 'current_password' );
+		}
+		if ( ! in_array( $method, array( 'email', 'sms' ), true ) || ! in_array( $method, identity_security_kit_get_allowed_mfa_methods( $user_id ), true ) ) {
+			return identity_security_kit_account_rest_error( __( 'This verification method is not available.', 'identity-security-kit' ) );
+		}
+		if ( 'email' === $method && ! identity_security_kit_is_email_verified( $user_id ) ) {
+			return identity_security_kit_account_rest_error( __( 'Verify the account email before enabling this method.', 'identity-security-kit' ) );
+		}
+		if ( 'sms' === $method && ! identity_security_kit_is_phone_verified( $user_id ) ) {
+			return identity_security_kit_account_rest_error( __( 'Verify the phone number before enabling this method.', 'identity-security-kit' ) );
+		}
+		$result = 'email' === $method
+			? identity_security_kit_create_email_otp_challenge( $user_id, 'mfa_enrollment_' . $method )
+			: identity_security_kit_create_phone_otp_challenge( $user_id, 'mfa_enrollment_' . $method );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'A security code was sent. Enter it to enable the method.', 'identity-security-kit' ),
+			array(
+				'mfa'                  => 'channel_code_sent',
+				'mfa_enroll_method'    => $method,
+				'mfa_enroll_challenge' => absint( $result ),
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_channel_mfa_confirm' === $action ) {
+		$challenge_id = absint( $params['challenge_id'] ?? 0 );
+		$result       = identity_security_kit_enable_channel_mfa( $user_id, $method, $challenge_id, $code );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result, 'otp_code' );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'The verification method is enabled.', 'identity-security-kit' ),
+			array(
+				'mfa'      => 'enabled',
+				'recovery' => $result['recovery_token'] ?? '',
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_channel_mfa_disable_start' === $action ) {
+		$password = identity_security_kit_account_rest_mfa_password( $user_id, $params );
+		$result   = is_wp_error( $password ) ? $password : identity_security_kit_start_channel_mfa_disable( $user_id, $method );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result, is_wp_error( $password ) ? 'current_password' : '' );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'A security code was sent. Enter it to disable the method.', 'identity-security-kit' ),
+			array(
+				'mfa'                   => 'disable_code_sent',
+				'mfa_disable_method'    => $method,
+				'mfa_disable_challenge' => absint( $result ),
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_channel_mfa_disable_confirm' === $action ) {
+		$result = identity_security_kit_confirm_channel_mfa_disable( $user_id, $method, absint( $params['challenge_id'] ?? 0 ), $code );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result, 'otp_code' );
+		}
+		return identity_security_kit_account_rest_mfa_success( __( 'The verification method was disabled.', 'identity-security-kit' ), array( 'mfa' => 'disabled' ) );
+	}
+
+	if ( 'identity_security_kit_mfa_preference' === $action ) {
+		$password = identity_security_kit_account_rest_mfa_password( $user_id, $params );
+		if ( is_wp_error( $password ) ) {
+			return identity_security_kit_account_rest_error( $password, 'current_password' );
+		}
+		if ( ! in_array( $method, identity_security_kit_get_user_mfa_methods( $user_id ), true ) ) {
+			return identity_security_kit_account_rest_error( __( 'This verification method is not enabled.', 'identity-security-kit' ), 'mfa_method' );
+		}
+		update_user_meta( $user_id, 'identity_mfa_preferred_method', $method );
+		identity_security_kit_log_event( 'mfa_preference_changed', 'success', $user_id, array( 'method' => $method ) );
+		return identity_security_kit_account_rest_mfa_success( __( 'Preferred verification method saved.', 'identity-security-kit' ), array( 'mfa' => 'preference_saved' ) );
+	}
+
+	if ( 'identity_security_kit_phone_otp_request' === $action ) {
+		$result = identity_security_kit_create_phone_otp_challenge( $user_id, 'verify_phone' );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result );
+		}
+		return identity_security_kit_account_rest_mfa_success(
+			__( 'A verification code was sent to your phone.', 'identity-security-kit' ),
+			array(
+				'phone_otp'       => 'sent',
+				'phone_challenge' => absint( $result ),
+			)
+		);
+	}
+
+	if ( 'identity_security_kit_phone_otp_verify' === $action ) {
+		$result = identity_security_kit_verify_phone_otp_challenge( absint( $params['challenge_id'] ?? 0 ), $user_id, $code, 'verify_phone' );
+		if ( is_wp_error( $result ) ) {
+			return identity_security_kit_account_rest_error( $result, 'otp_code' );
+		}
+		return identity_security_kit_account_rest_mfa_success( __( 'Your phone number is verified.', 'identity-security-kit' ), array( 'phone_otp' => 'verified' ) );
+	}
+
+	return identity_security_kit_account_rest_error( __( 'Choose a valid security action.', 'identity-security-kit' ) );
+}
+
 /** Register authenticated account routes. */
 function identity_security_kit_register_account_rest_routes() {
 	register_rest_route(
@@ -231,6 +435,15 @@ function identity_security_kit_register_account_rest_routes() {
 		array(
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => 'identity_security_kit_account_rest_update',
+			'permission_callback' => 'is_user_logged_in',
+		)
+	);
+	register_rest_route(
+		'identity-security-kit/v1',
+		'/account/mfa',
+		array(
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => 'identity_security_kit_account_rest_mfa',
 			'permission_callback' => 'is_user_logged_in',
 		)
 	);
