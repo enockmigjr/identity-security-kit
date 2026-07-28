@@ -1,0 +1,26 @@
+.identity-security-kit-admin form[aria-busy="true"],
+.identity-security-audit-admin form[aria-busy="true"] {
+	opacity: 0.72;
+}
+
+.isk-admin-runtime-toast {
+	position: fixed;
+	z-index: 100100;
+	top: 42px;
+	right: 20px;
+	display: flex;
+	width: min(420px, calc(100vw - 40px));
+	align-items: flex-start;
+	gap: 14px;
+	box-sizing: border-box;
+	border: 1px solid #c3c4c7;
+	border-left: 4px solid #2271b1;
+	background: #fff;
+	padding: 14px 16px;
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.isk-admin-runtime-toast.is-success { border-left-color: #00a32a; }
+.isk-admin-runtime-toast.is-error { border-left-color: #d63638; }
+.isk-admin-runtime-toast span { min-width: 0; flex: 1; line-height: 1.45; }
+.isk-admin-runtime-toast button { width: 28px; height: 28px; flex: none; border: 1px solid #c3c4c7; background: #fff; cursor: pointer; font-size: 18px; line-height: 1; }

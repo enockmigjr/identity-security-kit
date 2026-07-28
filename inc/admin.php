@@ -585,3 +585,14 @@ function identity_security_kit_enqueue_user_actions( $hook_suffix ) {
 	);
 }
 add_action( 'admin_enqueue_scripts', 'identity_security_kit_enqueue_user_actions' );
+
+/** Load progressive navigation on Identity Kit administration screens. */
+function identity_security_kit_enqueue_admin_runtime() {
+	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+	if ( ! in_array( $page, array( 'identity-security-kit', 'identity-security-kit-audit' ), true ) ) {
+		return;
+	}
+	wp_enqueue_style( 'identity-security-kit-admin-runtime', IDENTITY_SECURITY_KIT_URL . 'assets/css/admin-runtime.css', array(), IDENTITY_SECURITY_KIT_VERSION );
+	wp_enqueue_script( 'identity-security-kit-admin-runtime', IDENTITY_SECURITY_KIT_URL . 'assets/js/admin-runtime.js', array(), IDENTITY_SECURITY_KIT_VERSION, true );
+}
+add_action( 'admin_enqueue_scripts', 'identity_security_kit_enqueue_admin_runtime' );
