@@ -34,6 +34,7 @@ function identity_security_kit_store_login_challenge_payload( $token_hash, $payl
 		'expires_at'       => absint( $payload['expires_at'] ?? 0 ),
 		'methods'          => array_values( array_map( 'sanitize_key', $payload['methods'] ?? array() ) ),
 		'method'           => sanitize_key( $payload['method'] ?? '' ),
+		'method_prepared'  => ! empty( $payload['method_prepared'] ),
 		'otp_challenge_id' => absint( $payload['otp_challenge_id'] ?? 0 ),
 	);
 	$encrypted = identity_security_kit_encrypt_secret( wp_json_encode( $stored ) );
@@ -75,6 +76,7 @@ function identity_security_kit_create_login_challenge( $user_id, $remember = fal
 		'expires_at'       => time() + ( 5 * MINUTE_IN_SECONDS ),
 		'methods'          => $methods,
 		'method'           => in_array( $preferred, $methods, true ) ? $preferred : $methods[0],
+		'method_prepared'  => false,
 		'otp_challenge_id' => 0,
 	);
 	$stored = identity_security_kit_store_login_challenge_payload( $token_hash, $payload );
@@ -84,7 +86,7 @@ function identity_security_kit_create_login_challenge( $user_id, $remember = fal
 	update_user_meta( $user_id, 'identity_mfa_login_challenge', $token_hash );
 	identity_security_kit_log_event( 'mfa_login_challenge_created', 'info', $user_id, array( 'methods' => $methods ) );
 
-	return add_query_arg( array( 'action' => 'identity_security_mfa', 'token' => $token ), wp_login_url() );
+	return add_query_arg( 'token', $token, home_url( '/security-check/' ) );
 }
 
 /** Read and validate a pending login challenge. */
@@ -144,6 +146,7 @@ function identity_security_kit_prepare_login_method( $token, $method ) {
 		return $challenge_id;
 	}
 	$payload['method']           = $method;
+	$payload['method_prepared']  = true;
 	$payload['otp_challenge_id'] = absint( $challenge_id );
 	$stored = identity_security_kit_store_login_challenge_payload( $payload['token_hash'], $payload );
 	if ( is_wp_error( $stored ) ) {
@@ -166,6 +169,9 @@ function identity_security_kit_consume_login_challenge( $token, $code, $method =
 	}
 	if ( ! in_array( $method, $payload['methods'], true ) || $method !== $payload['method'] ) {
 		return new WP_Error( 'mfa_method_invalid', __( 'Select and prepare the verification method again.', 'identity-security-kit' ) );
+	}
+	if ( empty( $payload['method_prepared'] ) ) {
+		return new WP_Error( 'mfa_method_not_prepared', __( 'Select and prepare the verification method again.', 'identity-security-kit' ) );
 	}
 	if ( 'totp' === $method ) {
 		$verify = identity_security_kit_verify_totp_for_user( $payload['user']->ID, $code );
