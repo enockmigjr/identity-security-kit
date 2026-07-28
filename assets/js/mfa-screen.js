@@ -18,6 +18,13 @@
 		root.toggleAttribute('aria-busy', busy);
 		root.querySelectorAll('button').forEach(function(button) {
 			button.disabled = busy;
+			button.toggleAttribute('aria-busy', busy);
+		});
+	}
+
+	function syncAlternativeButtons() {
+		root.querySelectorAll('[data-isk-method]').forEach(function(button) {
+			button.hidden = button.dataset.iskMethod === method;
 		});
 	}
 
@@ -70,8 +77,10 @@
 	root.querySelectorAll('[data-isk-method]').forEach(function(button) {
 		button.addEventListener('click', function() {
 			method = button.dataset.iskMethod;
+			root.dataset.method = method;
 			label.textContent = button.dataset.label;
 			destination.textContent = button.dataset.destination;
+			syncAlternativeButtons();
 			prepareButton.hidden = false;
 			codeForm.hidden = true;
 			codeInput.value = '';
@@ -88,10 +97,13 @@
 		try {
 			const result = await request(root.dataset.verifyUrl, { method: method, code: codeInput.value });
 			showNotice(result.message, true);
+			// Completing MFA changes the authenticated session and invalidates prior REST nonces.
 			window.location.assign(result.data.redirect_url);
 		} catch (error) {
 			showNotice(error.message || 'Le code est invalide ou expire.', false);
 			codeInput.select();
 		}
 	});
+
+	syncAlternativeButtons();
 })();

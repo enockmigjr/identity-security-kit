@@ -20,6 +20,7 @@ Les dependances Composer de production sont embarquees dans le plugin. `giggsey/
 - Fournir une abstraction SMS generique avec adaptateur Twilio optionnel et filtre pour providers externes.
 - Afficher une page d'audit complete, filtrable et paginee par lots de 25 evenements, avec contexte nettoye repliable.
 - Enroler et verifier les facteurs TOTP, email et SMS, avec choix de methode au login.
+- Permettre de changer de methode MFA sans perdre la methode preferee dans les alternatives et afficher un etat de chargement pour chaque transition.
 - Afficher un QR code d'enrolement Authenticator genere localement, tout en conservant la cle manuelle et le lien `otpauth://` comme solutions de repli.
 - Desactiver les facteurs TOTP, email et SMS apres re-authentification, sans permettre a un compte soumis au MFA de retirer son dernier facteur.
 - Generer des recovery codes affiches une seule fois, stockes hashes et consommables une seule fois.
@@ -32,6 +33,7 @@ Les dependances Composer de production sont embarquees dans le plugin. `giggsey/
 - Permettre le renvoi de verification email avec session + nonce.
 - Journaliser les evenements d'identite sans stocker de secrets, reset keys ou IP brute.
 - Exposer des reglages bornes cote serveur.
+- Actualiser les reglages, filtres et paginations admin sans rechargement, avec progression visible et actions de securite regroupees dans la derniere colonne Utilisateurs.
 
 ## Authentification progressive
 

@@ -1,7 +1,9 @@
 (function() {
 	'use strict';
 
-	const config = window.IdentitySecurityMfaAccount || {};
+	function config() {
+		return window.IdentitySecurityMfaAccount || {};
+	}
 
 	function feedback(form, message, success) {
 		let notice = form.querySelector('[data-isk-form-feedback]');
@@ -19,6 +21,7 @@
 		panel.toggleAttribute('aria-busy', busy);
 		panel.querySelectorAll('button').forEach(function(button) {
 			button.disabled = busy;
+			button.toggleAttribute('aria-busy', busy);
 		});
 	}
 
@@ -31,12 +34,13 @@
 			payload[key] = value;
 		});
 		try {
-			const response = await fetch(config.endpoint, {
+			const settings = config();
+			const response = await fetch(settings.endpoint, {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-WP-Nonce': config.nonce || ''
+					'X-WP-Nonce': settings.nonce || ''
 				},
 				body: JSON.stringify(payload)
 			});
@@ -55,17 +59,17 @@
 				window.IdentitySecurityRenderAuthenticatorCodes();
 			}
 			nextPanel.scrollIntoView({ behavior: document.body.classList.contains('pv-reduce-motion') ? 'auto' : 'smooth', block: 'nearest' });
-			const focusTarget = nextPanel.querySelector('input:not([type="hidden"]), button');
+			const focusTarget = nextPanel.querySelector('input[name="otp_code"], input[name="mfa_code"], input:not([type="hidden"]), button');
 			if (focusTarget) focusTarget.focus({ preventScroll: true });
 		} catch (error) {
-			feedback(form, error.message || config.error, false);
+			feedback(form, error.message || config().error, false);
 			setBusy(panel, false);
 		}
 	}
 
 	document.addEventListener('submit', function(event) {
 		const form = event.target.closest('#identity-security-mfa form');
-		if (!form || !config.endpoint) return;
+		if (!form || !config().endpoint) return;
 		event.preventDefault();
 		submit(form);
 	});
@@ -79,7 +83,7 @@
 		}).join('\n');
 		try {
 			await navigator.clipboard.writeText(codes);
-			button.textContent = config.copied;
+			button.textContent = config().copied;
 		} catch (error) {
 			const selection = window.getSelection();
 			const range = document.createRange();

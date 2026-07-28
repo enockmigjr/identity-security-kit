@@ -529,6 +529,18 @@ function identity_security_kit_ajax_user_security_action() {
 		identity_security_kit_log_event( 'sessions_admin_revoked', 'warning', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
 		$result  = true;
 		$message = __( 'All active sessions were revoked and the user was notified.', 'identity-security-kit' );
+	} elseif ( 'send_password_reset' === $action ) {
+		$lock_key = 'identity_admin_password_reset_' . get_current_user_id() . '_' . $user_id;
+		if ( get_transient( $lock_key ) ) {
+			$result = new WP_Error( 'identity_password_reset_rate_limited', __( 'A reset link was already sent recently. Wait one minute before retrying.', 'identity-security-kit' ) );
+		} else {
+			$result = retrieve_password( $user->user_login );
+			if ( true === $result ) {
+				set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
+			}
+		}
+		$message = __( 'A secure password reset link was sent to the user.', 'identity-security-kit' );
+		identity_security_kit_log_event( is_wp_error( $result ) ? 'password_reset_admin_send_failed' : 'password_reset_admin_sent', is_wp_error( $result ) ? 'failure' : 'success', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
 	} else {
 		$result  = new WP_Error( 'identity_security_action_invalid', __( 'Choose a valid security action.', 'identity-security-kit' ) );
 		$message = '';
@@ -541,23 +553,51 @@ function identity_security_kit_ajax_user_security_action() {
 }
 add_action( 'wp_ajax_identity_security_user_action', 'identity_security_kit_ajax_user_security_action' );
 
-/** Add one compact security launcher to the WordPress user list. */
-function identity_security_kit_add_user_security_row_action( $actions, $user ) {
-	if ( ! current_user_can( 'identity_manage_security' ) || ! $user instanceof WP_User ) {
-		return $actions;
+/** Move security operations from row links into a dedicated user-list column. */
+function identity_security_kit_filter_user_row_actions( $actions ) {
+	unset( $actions['identity_security'] );
+	if ( current_user_can( 'identity_manage_security' ) ) {
+		unset( $actions['resetpassword'] );
 	}
-
-	$actions['identity_security'] = sprintf(
-		'<button type="button" class="button-link" data-identity-user-security data-user-id="%1$d" data-user-name="%2$s" data-nonce="%3$s">%4$s</button>',
-		absint( $user->ID ),
-		esc_attr( $user->display_name ?: $user->user_login ),
-		esc_attr( wp_create_nonce( 'identity_security_user_action_' . $user->ID ) ),
-		esc_html__( 'Security', 'identity-security-kit' )
-	);
 
 	return $actions;
 }
-add_filter( 'user_row_actions', 'identity_security_kit_add_user_security_row_action', 20, 2 );
+add_filter( 'user_row_actions', 'identity_security_kit_filter_user_row_actions', 20 );
+
+/** Add the dedicated account-actions column at the end of the user table. */
+function identity_security_kit_add_user_actions_column( $columns ) {
+	if ( current_user_can( 'identity_manage_security' ) ) {
+		$columns['identity_security_actions'] = __( 'Account actions', 'identity-security-kit' );
+	}
+
+	return $columns;
+}
+add_filter( 'manage_users_columns', 'identity_security_kit_add_user_actions_column' );
+
+/** Render AJAX security and password-reset buttons for one account. */
+function identity_security_kit_render_user_actions_column( $value, $column_name, $user_id ) {
+	if ( 'identity_security_actions' !== $column_name || ! current_user_can( 'identity_manage_security' ) ) {
+		return $value;
+	}
+	$user = get_userdata( $user_id );
+	if ( ! $user ) {
+		return '&mdash;';
+	}
+	$attributes = sprintf(
+		'data-user-id="%1$d" data-user-name="%2$s" data-nonce="%3$s"',
+		absint( $user->ID ),
+		esc_attr( $user->display_name ?: $user->user_login ),
+		esc_attr( wp_create_nonce( 'identity_security_user_action_' . $user->ID ) )
+	);
+
+	return sprintf(
+		'<div class="isk-user-action-column"><button type="button" class="button button-small" data-identity-user-security %1$s>%2$s</button><button type="button" class="button button-small" data-identity-user-reset %1$s>%3$s</button></div>',
+		$attributes,
+		esc_html__( 'Security', 'identity-security-kit' ),
+		esc_html__( 'Reset password', 'identity-security-kit' )
+	);
+}
+add_filter( 'manage_users_custom_column', 'identity_security_kit_render_user_actions_column', 10, 3 );
 
 /** Load the user security modal only on the user list. */
 function identity_security_kit_enqueue_user_actions( $hook_suffix ) {
@@ -582,6 +622,8 @@ function identity_security_kit_enqueue_user_actions( $hook_suffix ) {
 				'verifyDescription' => __( 'Send a fresh, expiring link to the account email.', 'identity-security-kit' ),
 				'revoke'            => __( 'Sign out every active session', 'identity-security-kit' ),
 				'revokeDescription' => __( 'Revoke every browser and device session for this account.', 'identity-security-kit' ),
+				'passwordReset'     => __( 'Send password reset link', 'identity-security-kit' ),
+				'passwordResetDescription' => __( 'Email a fresh, expiring frontend reset link to this account.', 'identity-security-kit' ),
 				'close'             => __( 'Close', 'identity-security-kit' ),
 				'confirmTitle'      => __( 'Confirm this action', 'identity-security-kit' ),
 				'confirmText'       => __( 'This security operation will be recorded in the audit log.', 'identity-security-kit' ),

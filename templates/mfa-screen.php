@@ -69,8 +69,7 @@ get_header();
 						<summary><?php esc_html_e( 'Utiliser une autre methode', 'identity-security-kit' ); ?></summary>
 						<div class="isk-mfa-method-list">
 							<?php foreach ( $methods as $method ) : ?>
-								<?php if ( $method['id'] === $selected ) : continue; endif; ?>
-								<button type="button" data-isk-method="<?php echo esc_attr( $method['id'] ); ?>" data-label="<?php echo esc_attr( $method['label'] ); ?>" data-destination="<?php echo esc_attr( $method['destination'] ); ?>">
+								<button type="button" data-isk-method="<?php echo esc_attr( $method['id'] ); ?>" data-label="<?php echo esc_attr( $method['label'] ); ?>" data-destination="<?php echo esc_attr( $method['destination'] ); ?>" <?php echo $method['id'] === $selected ? 'hidden' : ''; ?>>
 									<strong><?php echo esc_html( $method['label'] ); ?></strong>
 									<?php if ( $method['destination'] ) : ?><small><?php echo esc_html( $method['destination'] ); ?></small><?php endif; ?>
 								</button>

@@ -5,10 +5,26 @@
 		return document.querySelector('.identity-security-kit-admin, .identity-security-audit-admin');
 	}
 
+	function progress(busy) {
+		let bar = document.querySelector('[data-isk-progress]');
+		if (!bar) {
+			bar = document.createElement('div');
+			bar.className = 'isk-admin-progress';
+			bar.dataset.iskProgress = '';
+			bar.setAttribute('role', 'progressbar');
+			bar.setAttribute('aria-label', 'Operation en cours');
+			document.body.appendChild(bar);
+		}
+		window.requestAnimationFrame(function() {
+			bar.classList.toggle('is-active', busy);
+		});
+	}
+
 	function setBusy(form, busy) {
 		form.toggleAttribute('aria-busy', busy);
 		form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function(button) {
 			button.disabled = busy;
+			button.classList.toggle('is-busy', busy);
 		});
 	}
 
@@ -42,19 +58,24 @@
 		const selector = current && current.classList.contains('identity-security-audit-admin')
 			? '.identity-security-audit-admin'
 			: '.identity-security-kit-admin';
-		const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, options || {}));
-		const html = await response.text();
-		const parsed = new DOMParser().parseFromString(html, 'text/html');
-		const next = parsed.querySelector(selector);
-		if (!response.ok || !current || !next) {
-			throw new Error('The administration screen could not be refreshed.');
+		progress(true);
+		try {
+			const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, options || {}));
+			const html = await response.text();
+			const parsed = new DOMParser().parseFromString(html, 'text/html');
+			const next = parsed.querySelector(selector);
+			if (!response.ok || !current || !next) {
+				throw new Error('The administration screen could not be refreshed.');
+			}
+			current.replaceWith(next);
+			if (parsed.title) document.title = parsed.title;
+			if (historyMode === 'push') window.history.pushState({ isk: true }, '', response.url);
+			if (historyMode === 'replace') window.history.replaceState({ isk: true }, '', response.url);
+			const message = next.querySelector('.notice p, .updated p, .error p');
+			return message ? message.textContent.trim() : 'Changes saved.';
+		} finally {
+			progress(false);
 		}
-		current.replaceWith(next);
-		if (parsed.title) document.title = parsed.title;
-		if (historyMode === 'push') window.history.pushState({ isk: true }, '', response.url);
-		if (historyMode === 'replace') window.history.replaceState({ isk: true }, '', response.url);
-		const message = next.querySelector('.notice p, .updated p, .error p');
-		return message ? message.textContent.trim() : 'Changes saved.';
 	}
 
 	document.addEventListener('submit', async function(event) {
@@ -65,7 +86,7 @@
 		setBusy(form, true);
 		const method = (form.method || 'GET').toUpperCase();
 		try {
-			let url = form.action || window.location.href;
+			let url = new URL(form.getAttribute('action') || window.location.href, window.location.href).href;
 			let options = {};
 			let historyMode = 'replace';
 			if (method === 'GET') {

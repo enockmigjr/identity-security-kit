@@ -131,3 +131,22 @@
 .isk-user-security-dialog[aria-busy="true"] {
 	opacity: 0.72;
 }
+.column-identity_security_actions {
+	width: 230px;
+}
+
+.isk-user-action-column {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.isk-user-action-column .button {
+	margin: 0;
+}
+
+@media (max-width: 782px) {
+	.column-identity_security_actions {
+		width: auto;
+	}
+}

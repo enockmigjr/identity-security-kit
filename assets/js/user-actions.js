@@ -50,6 +50,7 @@
 
 	document.addEventListener('click', function(event) {
 		const launcher = event.target.closest('[data-identity-user-security]');
+		const resetLauncher = event.target.closest('[data-identity-user-reset]');
 		if (launcher) {
 			current = {
 				userId: launcher.dataset.userId,
@@ -61,6 +62,23 @@
 			notice.hidden = true;
 			resetConfirmation();
 			dialog.showModal();
+			return;
+		}
+		if (resetLauncher) {
+			current = {
+				userId: resetLauncher.dataset.userId,
+				userName: resetLauncher.dataset.userName,
+				nonce: resetLauncher.dataset.nonce
+			};
+			dialog.querySelector('h2').textContent = labels.title;
+			dialog.querySelector('.isk-user-security-dialog__header p').textContent = current.userName;
+			notice.hidden = true;
+			selectedAction = 'send_password_reset';
+			confirmationAction.textContent = labels.passwordReset;
+			actions.hidden = true;
+			confirmation.hidden = false;
+			dialog.showModal();
+			confirmation.querySelector('[data-isk-confirm]').focus();
 			return;
 		}
 		if (event.target.closest('[data-isk-close]')) {

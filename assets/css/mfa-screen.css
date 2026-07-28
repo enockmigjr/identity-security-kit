@@ -193,6 +193,29 @@
 	opacity: 0.72;
 }
 
+[data-isk-mfa] button[aria-busy="true"] {
+	position: relative;
+	padding-right: 2.75rem;
+}
+
+[data-isk-mfa] button[aria-busy="true"]::after {
+	position: absolute;
+	top: 50%;
+	right: 1rem;
+	width: 14px;
+	height: 14px;
+	margin-top: -8px;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	content: "";
+	animation: isk-mfa-spin 650ms linear infinite;
+}
+
+@keyframes isk-mfa-spin {
+	to { transform: rotate(360deg); }
+}
+
 @media (max-width: 900px) {
 	.isk-mfa-shell {
 		grid-template-columns: 1fr;
