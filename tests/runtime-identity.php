@@ -251,9 +251,10 @@ try {
 	$login_url = identity_security_kit_create_login_challenge( $user_id, false, home_url( '/runtime-target/' ) );
 	parse_str( (string) wp_parse_url( $login_url, PHP_URL_QUERY ), $login_query );
 	$login_token = $login_query['token'] ?? '';
+	$prepared    = identity_security_kit_prepare_login_method( $login_token, 'totp' );
 	$future_code = identity_security_kit_totp_at( $secret, time() + 30, 6, 30 );
 	$consumed    = identity_security_kit_consume_login_challenge( $login_token, $future_code, 'totp' );
-	identity_runtime_assert( ! is_wp_error( $consumed ), 'TOTP MFA login challenge failed.' );
+	identity_runtime_assert( ! is_wp_error( $prepared ) && ! is_wp_error( $consumed ), 'TOTP MFA login challenge failed.' );
 
 	$email_messages = array();
 	$disable_id     = identity_security_kit_start_channel_mfa_disable( $user_id, 'email' );
