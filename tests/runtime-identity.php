@@ -78,7 +78,7 @@ add_filter(
 try {
 	$original_post = $_POST;
 	$_POST         = array();
-	identity_runtime_assert( 'legacy' === identity_security_kit_get_profile_action(), 'Legacy profile submissions are no longer recognized.' );
+	identity_runtime_assert( 'invalid' === identity_security_kit_get_profile_action(), 'Profile submissions without a scoped action were accepted.' );
 	$_POST['profile_action'] = 'avatar';
 	identity_runtime_assert( 'avatar' === identity_security_kit_get_profile_action(), 'The scoped avatar action is not recognized.' );
 	$_POST['profile_action'] = 'unexpected';
