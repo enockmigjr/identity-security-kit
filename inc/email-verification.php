@@ -57,11 +57,10 @@ function identity_security_kit_is_email_verified( $user_id ) {
 function identity_security_kit_get_email_verification_url( $user_id, $token ) {
 	return add_query_arg(
 		array(
-			'action' => 'identity_security_kit_verify_email',
 			'uid'    => absint( $user_id ),
 			'token'  => rawurlencode( $token ),
 		),
-		admin_url( 'admin-post.php' )
+		home_url( '/verify-email/' )
 	);
 }
 
@@ -312,6 +311,16 @@ function identity_security_kit_handle_email_verification() {
 }
 add_action( 'admin_post_nopriv_identity_security_kit_verify_email', 'identity_security_kit_handle_email_verification' );
 add_action( 'admin_post_identity_security_kit_verify_email', 'identity_security_kit_handle_email_verification' );
+
+/** Dispatch the clean public email-verification URL. */
+function identity_security_kit_dispatch_email_verification_url() {
+	$request_path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+	$target_path  = wp_parse_url( home_url( '/verify-email/' ), PHP_URL_PATH );
+	if ( untrailingslashit( (string) $request_path ) === untrailingslashit( (string) $target_path ) ) {
+		identity_security_kit_handle_email_verification();
+	}
+}
+add_action( 'template_redirect', 'identity_security_kit_dispatch_email_verification_url', 0 );
 
 /**
  * Handle authenticated requests to resend the verification email.

@@ -444,3 +444,144 @@ function identity_security_kit_handle_test_sms_provider() {
 	exit;
 }
 add_action( 'admin_post_identity_security_kit_test_sms_provider', 'identity_security_kit_handle_test_sms_provider' );
+
+/** Remove every enrolled factor during an administrator-assisted recovery. */
+function identity_security_kit_admin_reset_user_mfa( $user_id ) {
+	$user_id = absint( $user_id );
+	if ( ! get_userdata( $user_id ) ) {
+		return new WP_Error( 'identity_user_not_found', __( 'User not found.', 'identity-security-kit' ) );
+	}
+
+	$challenge_hash = (string) get_user_meta( $user_id, 'identity_mfa_login_challenge', true );
+	if ( preg_match( '/^[a-f0-9]{64}$/', $challenge_hash ) ) {
+		delete_transient( 'isk_login_' . $challenge_hash );
+	}
+	foreach ( array(
+		identity_security_kit_totp_secret_meta_key(),
+		'identity_mfa_totp_last_counter',
+		'identity_mfa_totp_pending',
+		'identity_mfa_email_enabled',
+		'identity_mfa_sms_enabled',
+		'identity_mfa_recovery_codes',
+		'identity_mfa_enabled_at',
+		'identity_mfa_preferred_method',
+		'identity_mfa_login_challenge',
+	) as $meta_key ) {
+		delete_user_meta( $user_id, $meta_key );
+	}
+	identity_security_kit_clear_mfa_grace_state( $user_id );
+	identity_security_kit_refresh_mfa_grace( $user_id );
+	identity_security_kit_destroy_other_sessions( $user_id );
+	identity_security_kit_send_security_notification( $user_id, __( 'An administrator reset all two-factor authentication methods on your account. Enroll a new method before the grace period ends.', 'identity-security-kit' ) );
+	identity_security_kit_log_event( 'mfa_admin_reset', 'warning', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
+
+	return true;
+}
+
+/** Restart the configured MFA grace period for an eligible account. */
+function identity_security_kit_admin_restart_user_grace( $user_id ) {
+	$user_id = absint( $user_id );
+	if ( ! get_userdata( $user_id ) || ! identity_security_kit_user_requires_mfa( $user_id ) ) {
+		return new WP_Error( 'identity_grace_not_required', __( 'This account is not subject to the MFA grace policy.', 'identity-security-kit' ) );
+	}
+	if ( identity_security_kit_user_has_mfa_method( $user_id ) ) {
+		return new WP_Error( 'identity_grace_not_applicable', __( 'This account already has an active MFA method.', 'identity-security-kit' ) );
+	}
+
+	identity_security_kit_clear_mfa_grace_state( $user_id );
+	update_user_meta( $user_id, 'identity_mfa_grace_started_at', time() );
+	identity_security_kit_send_security_notification( $user_id, __( 'An administrator restarted your MFA enrollment grace period. Configure a verification method from your profile.', 'identity-security-kit' ) );
+	identity_security_kit_log_event( 'mfa_grace_admin_restarted', 'warning', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
+
+	return true;
+}
+
+/** Execute one privileged user-list security operation. */
+function identity_security_kit_ajax_user_security_action() {
+	if ( ! current_user_can( 'identity_manage_security' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to manage account security.', 'identity-security-kit' ) ), 403 );
+	}
+
+	$user_id = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0;
+	$action  = isset( $_POST['security_action'] ) ? sanitize_key( wp_unslash( $_POST['security_action'] ) ) : '';
+	check_ajax_referer( 'identity_security_user_action_' . $user_id, 'nonce' );
+	$user = get_userdata( $user_id );
+	if ( ! $user ) {
+		wp_send_json_error( array( 'message' => __( 'User not found.', 'identity-security-kit' ) ), 404 );
+	}
+	if ( get_current_user_id() === $user_id && in_array( $action, array( 'reset_mfa', 'restart_grace' ), true ) ) {
+		wp_send_json_error( array( 'message' => __( 'Use your profile security flow for your own account.', 'identity-security-kit' ) ), 409 );
+	}
+
+	if ( 'reset_mfa' === $action ) {
+		$result  = identity_security_kit_admin_reset_user_mfa( $user_id );
+		$message = __( 'MFA methods were reset and the user was notified.', 'identity-security-kit' );
+	} elseif ( 'restart_grace' === $action ) {
+		$result  = identity_security_kit_admin_restart_user_grace( $user_id );
+		$message = __( 'The MFA grace period was restarted.', 'identity-security-kit' );
+	} elseif ( 'resend_verification' === $action ) {
+		$result  = identity_security_kit_create_email_verification_challenge( $user_id, $user->user_email );
+		$message = __( 'A new email verification link was sent.', 'identity-security-kit' );
+		identity_security_kit_log_event( is_wp_error( $result ) ? 'email_verification_admin_resend_failed' : 'email_verification_admin_resent', is_wp_error( $result ) ? 'failure' : 'success', $user_id, array( 'actor_user_id' => get_current_user_id() ) );
+	} else {
+		$result  = new WP_Error( 'identity_security_action_invalid', __( 'Choose a valid security action.', 'identity-security-kit' ) );
+		$message = '';
+	}
+
+	if ( is_wp_error( $result ) ) {
+		wp_send_json_error( array( 'message' => $result->get_error_message() ), 422 );
+	}
+	wp_send_json_success( array( 'message' => $message ) );
+}
+add_action( 'wp_ajax_identity_security_user_action', 'identity_security_kit_ajax_user_security_action' );
+
+/** Add one compact security launcher to the WordPress user list. */
+function identity_security_kit_add_user_security_row_action( $actions, $user ) {
+	if ( ! current_user_can( 'identity_manage_security' ) || ! $user instanceof WP_User ) {
+		return $actions;
+	}
+
+	$actions['identity_security'] = sprintf(
+		'<button type="button" class="button-link" data-identity-user-security data-user-id="%1$d" data-user-name="%2$s" data-nonce="%3$s">%4$s</button>',
+		absint( $user->ID ),
+		esc_attr( $user->display_name ?: $user->user_login ),
+		esc_attr( wp_create_nonce( 'identity_security_user_action_' . $user->ID ) ),
+		esc_html__( 'Security', 'identity-security-kit' )
+	);
+
+	return $actions;
+}
+add_filter( 'user_row_actions', 'identity_security_kit_add_user_security_row_action', 20, 2 );
+
+/** Load the user security modal only on the user list. */
+function identity_security_kit_enqueue_user_actions( $hook_suffix ) {
+	if ( 'users.php' !== $hook_suffix || ! current_user_can( 'identity_manage_security' ) ) {
+		return;
+	}
+	wp_enqueue_style( 'identity-security-kit-user-actions', IDENTITY_SECURITY_KIT_URL . 'assets/css/user-actions.css', array(), IDENTITY_SECURITY_KIT_VERSION );
+	wp_enqueue_script( 'identity-security-kit-user-actions', IDENTITY_SECURITY_KIT_URL . 'assets/js/user-actions.js', array(), IDENTITY_SECURITY_KIT_VERSION, true );
+	wp_localize_script(
+		'identity-security-kit-user-actions',
+		'IdentitySecurityUserActions',
+		array(
+			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+			'labels'  => array(
+				'eyebrow'           => __( 'Identity Security Kit', 'identity-security-kit' ),
+				'title'             => __( 'Account security', 'identity-security-kit' ),
+				'reset'             => __( 'Reset all MFA methods', 'identity-security-kit' ),
+				'resetDescription'  => __( 'Remove authenticators, channel factors, and recovery codes.', 'identity-security-kit' ),
+				'grace'             => __( 'Restart MFA grace period', 'identity-security-kit' ),
+				'graceDescription'  => __( 'Start the configured enrollment window again.', 'identity-security-kit' ),
+				'verify'            => __( 'Send email verification', 'identity-security-kit' ),
+				'verifyDescription' => __( 'Send a fresh, expiring link to the account email.', 'identity-security-kit' ),
+				'close'             => __( 'Close', 'identity-security-kit' ),
+				'confirmTitle'      => __( 'Confirm this action', 'identity-security-kit' ),
+				'confirmText'       => __( 'This security operation will be recorded in the audit log.', 'identity-security-kit' ),
+				'confirm'           => __( 'Confirm', 'identity-security-kit' ),
+				'cancel'            => __( 'Cancel', 'identity-security-kit' ),
+				'error'             => __( 'The action could not be completed.', 'identity-security-kit' ),
+			),
+		)
+	);
+}
+add_action( 'admin_enqueue_scripts', 'identity_security_kit_enqueue_user_actions' );
