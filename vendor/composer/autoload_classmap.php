@@ -10,7 +10,6 @@ return array(
     'Symfony\\Polyfill\\Mbstring\\Mbstring' => $vendorDir . '/symfony/polyfill-mbstring/Mbstring.php',
     'libphonenumber\\CountryCodeSource' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/CountryCodeSource.php',
     'libphonenumber\\CountryCodeToRegionCodeMap' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/CountryCodeToRegionCodeMap.php',
-    'libphonenumber\\CountryCodeToRegionCodeMapForTesting' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/CountryCodeToRegionCodeMapForTesting.php',
     'libphonenumber\\MatchType' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/MatchType.php',
     'libphonenumber\\Matcher' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/Matcher.php',
     'libphonenumber\\MatcherAPIInterface' => $vendorDir . '/giggsey/libphonenumber-for-php-lite/src/MatcherAPIInterface.php',
