@@ -107,7 +107,8 @@ function identity_security_kit_get_async_redirect_state( $key, $args, $url ) {
 			'success' => false,
 			'message' => $rate_limited ? __( 'Trop de tentatives. Patientez avant de reessayer.', 'identity-security-kit' ) : __( 'Identifiant ou mot de passe incorrect.', 'identity-security-kit' ),
 			'data'    => array(),
-			'errors'  => $rate_limited ? array() : array( 'log' => __( 'Verifiez vos identifiants.', 'identity-security-kit' ) ),
+			// Generic response on purpose: never reveal which credential is wrong (anti-enumeration).
+			'errors'  => array(),
 			'status'  => $rate_limited ? 429 : 422,
 		);
 	}
